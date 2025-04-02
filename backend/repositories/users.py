@@ -6,7 +6,6 @@ from models.users import (
     UserOut,
     UserUpdateIn,
     UserUpdateOut,
-    UserProfileOut,
     DuplicateUserError,
     UserOutWithPassword,
     Error,
@@ -55,7 +54,7 @@ class UsersRepository:
             print(e)
             return None
 
-    def view_user(self, email: str) -> Optional[UserProfileOut]:
+    def view_user(self, email: str) -> Optional[UserOut]:
         try:
             with DatabaseConnection.get_db() as db:
                 result = db.execute(
@@ -65,13 +64,11 @@ class UsersRepository:
                 record = result.fetchone()
                 if record is None:
                     return None
-                return UserProfileOut(
+                return UserOut(
                     user_id=record[0],
+                    email=record[3],
                     first_name=record[1],
                     last_name=record[2],
-                    email=record[3],
-                    created_at=parse_datetime(record[4]),
-                    updated_at=parse_datetime(record[5]),
                     last_login=parse_datetime(record[6]),
                 )
         except Exception as e:
@@ -170,3 +167,35 @@ class UsersRepository:
         except Exception as e:
             print(e)
             return None
+
+    def create_admin_user(self, info: UserIn, hashed_password: str) -> UserOut:
+        try:
+            with DatabaseConnection.get_db() as db:
+                print("Creating admin user...")
+                # First create the user
+                result = db.execute(
+                    load_sql_template("users/create_user.sql"),
+                    [
+                        info.email,
+                        info.first_name,
+                        info.last_name,
+                        hashed_password,
+                    ],
+                )
+                record = result.fetchone()
+                if not record:
+                    raise Exception("Failed to create user")
+                user_id = record[0]
+                print(f"Created user with ID: {user_id}")
+
+                # Then assign the admin role
+                print("Assigning admin role...")
+                db.execute(
+                    load_sql_template("users/assign_admin_role.sql"),
+                    [user_id],
+                )
+                print("Admin role assigned successfully")
+                return self.record_to_user_out(record)
+        except Exception as e:
+            print(f"Error creating admin user: {e}")
+            raise DuplicateUserError from e

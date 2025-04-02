@@ -15,15 +15,17 @@ from models.users import (
     UserUpdateIn,
     DuplicateUserError,
     Error,
-    UserProfileOut,
     HttpError,
     UserUpdateOut,
     AdminUserIn,
 )
 from models.auth import AccountForm, AccountToken
+from models.roles import UserWithRoles
 from repositories.users import UsersRepository
+from repositories.roles import RolesRepository
 from typing import Union, List
 import os
+from routers.roles import require_admin
 
 
 router = APIRouter()
@@ -77,17 +79,19 @@ async def create_user(
 @router.get("/users", response_model=Union[Error, List[UserOut]])
 def get_all_users(
     repo: UsersRepository = Depends(),
+    _: dict = Depends(require_admin),
 ):
     return repo.get_all_users()
 
 
-@router.get("/users/self", response_model=UserProfileOut)
+@router.get("/users/self", response_model=UserWithRoles)
 async def view_self(
     repo: UsersRepository = Depends(),
+    roles_repo: RolesRepository = Depends(),
     user_data: dict = Depends(authenticator.get_current_account_data),
 ):
     """
-    View own profile.
+    View own profile with roles.
     """
     if user_data is None:
         raise HTTPException(
@@ -100,7 +104,7 @@ async def view_self(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User profile not found",
         )
-    return user
+    return roles_repo.get_user_with_roles(user)
 
 
 @router.get("/token", response_model=AccountToken | None)

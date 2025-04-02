@@ -25,6 +25,11 @@ class Role(RoleBase):
         from_attributes = True
 
 
+class RoleOut(RoleBase):
+    class Config:
+        from_attributes = True
+
+
 class UserRole(BaseModel):
     user_id: int
     role_id: int
@@ -39,7 +44,9 @@ class UserWithRoles(BaseModel):
     email: str
     first_name: str
     last_name: str
-    roles: List[Role]
+    roles: List[RoleOut]
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
     last_login: Optional[datetime] = None
 
     class Config:
