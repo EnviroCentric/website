@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List
-from models.roles import Role, RoleCreate, UserWithRoles
+from models.roles import Role, RoleCreate, UserWithRoles, SecurityLevelConfig
 from repositories.roles import RolesRepository
 from repositories.users import UsersRepository
 from authenticator import authenticator
@@ -16,7 +16,33 @@ def get_users_repo():
     return UsersRepository()
 
 
+def require_admin():
+    """Require the user to have the admin role (security level 10)"""
+
+    async def check_admin(
+        user_data: dict = Depends(authenticator.get_current_account_data),
+    ):
+        if not user_data:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Not authenticated",
+            )
+
+        roles_repo = RolesRepository()
+        user_level = roles_repo.get_user_max_security_level(user_data["user_id"])
+        if user_level < 10:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin role (security level 10) required",
+            )
+        return user_data
+
+    return check_admin
+
+
 def require_security_level(min_level: int):
+    """Require the user to have at least the specified security level"""
+
     async def check_security_level(
         user_data: dict = Depends(authenticator.get_current_account_data),
     ):
@@ -38,13 +64,32 @@ def require_security_level(min_level: int):
     return check_security_level
 
 
+@router.get("/security-levels", response_model=SecurityLevelConfig)
+async def get_security_levels(
+    roles_repo: RolesRepository = Depends(get_roles_repo),
+    _: dict = Depends(require_admin()),
+):
+    """Get current security level configuration (admin only)"""
+    return roles_repo.get_security_levels()
+
+
+@router.put("/security-levels", response_model=SecurityLevelConfig)
+async def update_security_levels(
+    config: SecurityLevelConfig,
+    roles_repo: RolesRepository = Depends(get_roles_repo),
+    _: dict = Depends(require_admin()),
+):
+    """Update security level configuration (admin only)"""
+    return roles_repo.update_security_levels(config)
+
+
 @router.post("/roles", response_model=Role)
 async def create_role(
     role: RoleCreate,
     roles_repo: RolesRepository = Depends(get_roles_repo),
-    _: dict = Depends(require_security_level(10)),
+    _: dict = Depends(require_admin()),
 ):
-    """Create a new role (requires security level 10)"""
+    """Create a new role (admin only)"""
     existing_role = roles_repo.get_role(role.name)
     if existing_role:
         raise HTTPException(

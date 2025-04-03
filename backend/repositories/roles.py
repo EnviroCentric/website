@@ -1,7 +1,7 @@
 from typing import List, Optional
 from datetime import datetime
 import pytz
-from models.roles import Role, RoleCreate, UserWithRoles, RoleOut
+from models.roles import Role, RoleCreate, UserWithRoles, RoleOut, SecurityLevelConfig
 from models.users import UserOut
 from db.connection import DatabaseConnection
 from sql.loader import load_sql_template
@@ -29,6 +29,53 @@ def parse_datetime(dt):
 
 
 class RolesRepository:
+    def get_security_levels(self) -> SecurityLevelConfig:
+        """Get the current security level configuration."""
+        try:
+            with DatabaseConnection.get_db() as db:
+                result = db.execute(load_sql_template("roles/get_security_levels.sql"))
+                record = result.fetchone()
+                if record:
+                    return SecurityLevelConfig(
+                        create_role=record[0],
+                        view_roles=record[1],
+                        manage_roles=record[2],
+                        view_users=record[3],
+                    )
+                # Return default values if no configuration exists
+                return SecurityLevelConfig()
+        except Exception as e:
+            print(f"Error getting security levels: {e}")
+            return SecurityLevelConfig()
+
+    def update_security_levels(
+        self, config: SecurityLevelConfig
+    ) -> SecurityLevelConfig:
+        """Update the security level configuration."""
+        try:
+            with DatabaseConnection.get_db() as db:
+                result = db.execute(
+                    load_sql_template("roles/update_security_levels.sql"),
+                    [
+                        config.create_role,
+                        config.view_roles,
+                        config.manage_roles,
+                        config.view_users,
+                    ],
+                )
+                record = result.fetchone()
+                if record:
+                    return SecurityLevelConfig(
+                        create_role=record[0],
+                        view_roles=record[1],
+                        manage_roles=record[2],
+                        view_users=record[3],
+                    )
+                return config
+        except Exception as e:
+            print(f"Error updating security levels: {e}")
+            return config
+
     def create_role(self, role: RoleCreate) -> Optional[Role]:
         try:
             with DatabaseConnection.get_db() as db:
