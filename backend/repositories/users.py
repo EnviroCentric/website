@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import List, Optional, Union
+import pytz
 from db.connection import DatabaseConnection
 from models.users import (
     UserIn,
@@ -13,12 +14,26 @@ from models.users import (
 from sql.loader import load_sql_template
 
 
-def parse_datetime(date_str: str) -> Optional[datetime]:
+def parse_datetime(date_str: str) -> Optional[str]:
     if not date_str:
         return None
     try:
-        return datetime.strptime(date_str, "%m-%d-%Y")
-    except (ValueError, TypeError):
+        # Convert to datetime if it's a string
+        if isinstance(date_str, str):
+            dt = datetime.strptime(date_str, "%m-%d-%Y")
+        else:
+            dt = date_str
+
+        # Convert to PST timezone
+        pst = pytz.timezone("America/Los_Angeles")
+        if dt.tzinfo is None:
+            dt = pytz.UTC.localize(dt)
+        dt_pst = dt.astimezone(pst)
+
+        # Format as yyyy-mm-dd hh:MM
+        return dt_pst.strftime("%Y-%m-%d %H:%M")
+    except (ValueError, TypeError, AttributeError) as e:
+        print(f"Error parsing datetime: {e}")
         return None
 
 

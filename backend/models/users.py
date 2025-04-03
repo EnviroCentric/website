@@ -55,28 +55,28 @@ class UserUpdateIn(BaseModel):
 
 class UserUpdateOut(UserOut):
     message: Optional[str] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
 
     @validator("created_at", "updated_at")
     def parse_datetime(cls, v):
         if isinstance(v, str):
             try:
-                return datetime.strptime(v, "%m-%d-%Y")
+                return v
             except ValueError:
                 return v
         return v
 
 
 class UserProfileOut(UserOut):
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
 
     @validator("created_at", "updated_at")
     def parse_datetime(cls, v):
         if isinstance(v, str):
             try:
-                return datetime.strptime(v, "%m-%d-%Y")
+                return v
             except ValueError:
                 return v
         return v

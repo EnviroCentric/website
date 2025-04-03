@@ -25,6 +25,7 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - SIGNING_KEY=${SIGNING_KEY}
       - ADMIN_CREATION_SECRET=${ADMIN_CREATION_SECRET}
+      - ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://192.168.1.113:5173
     depends_on:
       db:
         condition: service_healthy

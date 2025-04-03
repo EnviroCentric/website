@@ -1,5 +1,3 @@
-import { getToken } from "@galvanize-inc/jwtdown-for-react";
-
 /**
  * Check if an email exists in the system
  * @param email - Email address to check
@@ -11,7 +9,7 @@ export const checkEmailExists = async (email, baseUrl) => {
   }
 
   try {
-    const response = await fetch(`${baseUrl}/accounts/check-email/${email}`, {
+    const response = await fetch(`${baseUrl}/users/check-email/${email}`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -80,12 +78,12 @@ const login = async (email, password, baseUrl) => {
       }
     }
 
-    const token = await getToken(baseUrl);
+    const tokenData = await result.json();
     
     // Cache the token and its expiry
-    localStorage.setItem('authToken', token);
+    localStorage.setItem('authToken', tokenData.access_token);
     localStorage.setItem('tokenTimestamp', Date.now().toString());
-    return token;
+    return tokenData.access_token;
   } catch (error) {
     console.error("Login error:", error);
     throw error;

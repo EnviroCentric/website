@@ -1,5 +1,6 @@
 from typing import List, Optional
 from datetime import datetime
+import pytz
 from models.roles import Role, RoleCreate, UserWithRoles, RoleOut
 from models.users import UserOut
 from db.connection import DatabaseConnection
@@ -7,12 +8,24 @@ from sql.loader import load_sql_template
 
 
 def parse_datetime(dt):
-    if isinstance(dt, str):
-        try:
-            return datetime.strptime(dt, "%m-%d-%Y")
-        except ValueError:
-            return dt
-    return dt
+    if not dt:
+        return None
+    try:
+        # Convert to datetime if it's a string
+        if isinstance(dt, str):
+            dt = datetime.strptime(dt, "%m-%d-%Y")
+
+        # Convert to PST timezone
+        pst = pytz.timezone("America/Los_Angeles")
+        if dt.tzinfo is None:
+            dt = pytz.UTC.localize(dt)
+        dt_pst = dt.astimezone(pst)
+
+        # Format as yyyy-mm-dd hh:MM
+        return dt_pst.strftime("%Y-%m-%d %H:%M")
+    except (ValueError, TypeError, AttributeError) as e:
+        print(f"Error parsing datetime: {e}")
+        return None
 
 
 class RolesRepository:
@@ -20,8 +33,8 @@ class RolesRepository:
         try:
             with DatabaseConnection.get_db() as db:
                 result = db.execute(
-                    load_sql_template("create_role.sql"),
-                    [role.name, role.description],
+                    load_sql_template("roles/create_role.sql"),
+                    [role.name, role.description, role.security_level],
                 )
                 record = result.fetchone()
                 if record is None:
@@ -30,8 +43,9 @@ class RolesRepository:
                     role_id=record[0],
                     name=record[1],
                     description=record[2],
-                    created_at=parse_datetime(record[3]),
-                    updated_at=parse_datetime(record[4]),
+                    security_level=record[3],
+                    created_at=parse_datetime(record[4]),
+                    updated_at=parse_datetime(record[5]),
                 )
         except Exception as e:
             print(e)
@@ -41,7 +55,7 @@ class RolesRepository:
         try:
             with DatabaseConnection.get_db() as db:
                 result = db.execute(
-                    load_sql_template("get_role.sql"),
+                    load_sql_template("roles/get_role.sql"),
                     [name],
                 )
                 record = result.fetchone()
@@ -51,8 +65,9 @@ class RolesRepository:
                     role_id=record[0],
                     name=record[1],
                     description=record[2],
-                    created_at=parse_datetime(record[3]),
-                    updated_at=parse_datetime(record[4]),
+                    security_level=record[3],
+                    created_at=parse_datetime(record[4]),
+                    updated_at=parse_datetime(record[5]),
                 )
         except Exception as e:
             print(e)
@@ -61,14 +76,15 @@ class RolesRepository:
     def get_all_roles(self) -> List[Role]:
         try:
             with DatabaseConnection.get_db() as db:
-                result = db.execute(load_sql_template("get_all_roles.sql"))
+                result = db.execute(load_sql_template("roles/get_all_roles.sql"))
                 return [
                     Role(
                         role_id=record[0],
                         name=record[1],
                         description=record[2],
-                        created_at=parse_datetime(record[3]),
-                        updated_at=parse_datetime(record[4]),
+                        security_level=record[3],
+                        created_at=parse_datetime(record[4]),
+                        updated_at=parse_datetime(record[5]),
                     )
                     for record in result
                 ]
@@ -80,7 +96,7 @@ class RolesRepository:
         try:
             with DatabaseConnection.get_db() as db:
                 db.execute(
-                    load_sql_template("assign_role.sql"),
+                    load_sql_template("roles/assign_role.sql"),
                     [user_id, role_id],
                 )
                 return True
@@ -92,7 +108,7 @@ class RolesRepository:
         try:
             with DatabaseConnection.get_db() as db:
                 db.execute(
-                    load_sql_template("remove_role.sql"),
+                    load_sql_template("roles/remove_role.sql"),
                     [user_id, role_id],
                 )
                 return True
@@ -112,6 +128,7 @@ class RolesRepository:
                     RoleOut(
                         name=record[1],
                         description=record[2],
+                        security_level=record[3],
                     )
                     for record in result
                 ]
@@ -143,3 +160,17 @@ class RolesRepository:
             updated_at=updated_at,
             last_login=user.last_login,
         )
+
+    def get_user_max_security_level(self, user_id: int) -> int:
+        """Get the highest security level among all roles assigned to a user."""
+        try:
+            with DatabaseConnection.get_db() as db:
+                result = db.execute(
+                    load_sql_template("roles/get_user_max_security_level.sql"),
+                    [user_id],
+                )
+                record = result.fetchone()
+                return record[0] if record else 0
+        except Exception as e:
+            print(f"Error getting user max security level: {e}")
+            return 0

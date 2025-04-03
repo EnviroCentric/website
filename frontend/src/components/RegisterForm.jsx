@@ -66,7 +66,7 @@ export default function RegisterForm({ onClose, onSwitchToLogin }) {
     };
 
     try {
-      const response = await fetch(`${baseUrl}/accounts`, {
+      const response = await fetch(`${baseUrl}/users`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

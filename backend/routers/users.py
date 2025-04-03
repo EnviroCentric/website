@@ -25,7 +25,7 @@ from repositories.users import UsersRepository
 from repositories.roles import RolesRepository
 from typing import Union, List
 import os
-from routers.roles import require_admin
+from routers.roles import require_security_level
 
 
 router = APIRouter()
@@ -79,8 +79,9 @@ async def create_user(
 @router.get("/users", response_model=Union[Error, List[UserOut]])
 def get_all_users(
     repo: UsersRepository = Depends(),
-    _: dict = Depends(require_admin),
+    _: dict = Depends(require_security_level(5)),
 ):
+    """Get all users (requires security level 5 or higher)"""
     return repo.get_all_users()
 
 
@@ -160,17 +161,16 @@ async def update_user(
         )
 
 
-@router.get("/users/check-email/{email}")
-async def check_email(
+@router.get("/users/check-email/{email}", response_model=dict)
+async def check_email_exists(
     email: str,
     repo: UsersRepository = Depends(),
 ):
     """
     Check if an email exists in the system.
-    Returns a JSON object with a boolean 'exists' field.
     """
-    exists = repo.check_email_exists(email)
-    return {"exists": exists}
+    user = repo.get_user(email)
+    return {"exists": user is not None}
 
 
 @router.post("/users/create-admin", response_model=AccountToken | HttpError)
