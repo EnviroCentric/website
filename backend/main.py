@@ -4,7 +4,11 @@ from routers.users import router as users_router
 from routers.roles import router as roles_router
 from fastapi.middleware.cors import CORSMiddleware
 import os
+import subprocess
 
+# Run database migrations
+print("Running database migrations...")
+subprocess.run(["python", "db/migrate.py"], check=True)
 
 # from routers import user  # Example router
 
@@ -32,6 +36,11 @@ app.include_router(roles_router, tags=["roles"])
 @app.get("/")
 def root():
     return {"message": "Welcome to the backend!"}
+
+
+@app.get("/health")
+def health_check():
+    return {"status": "healthy"}
 
 
 # Only create Lambda handler if running in AWS Lambda

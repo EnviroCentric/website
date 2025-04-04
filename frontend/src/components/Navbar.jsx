@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import useToken from "@galvanize-inc/jwtdown-for-react";
 import { useEffect, useState, useRef } from 'react';
 import { getCachedToken } from './Auth';
@@ -12,14 +12,18 @@ const navigation = [
 
 const userMenuOptions = [
   { name: "Profile", href: "/profile", icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" },
+  { name: "Update Profile", href: "/profile/update", icon: "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" },
+  { name: "Manage Users", href: "/manage-users", icon: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z", securityLevel: 10 },
   { name: "Logout", action: "logout", icon: "M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" }
 ];
 
 function Navbar() {
   const { token, logout } = useToken();
   const [username, setUsername] = useState("");
+  const [userSecurityLevel, setUserSecurityLevel] = useState(0);
   const [changed, setChanged] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -46,7 +50,11 @@ function Navbar() {
     const cachedToken = getCachedToken();
     const tokenToUse = cachedToken || token;
     
-    if (!tokenToUse) return;
+    if (!tokenToUse) {
+      setUsername("");
+      setUserSecurityLevel(0);
+      return;
+    }
 
     const apiUrl = import.meta.env.VITE_API_URL;
     if (!apiUrl) {
@@ -54,39 +62,84 @@ function Navbar() {
       return;
     }
 
-    const config = {
-      method: "GET",
-      credentials: "include",
-      headers: {
-        Authorization: `Bearer ${tokenToUse}`,
-        "Content-Type": "application/json",
-      },
-    };
     try {
       const response = await fetch(
         `${apiUrl}/users/self`,
-        config
+        {
+          method: "GET",
+          credentials: "include",
+          headers: {
+            Authorization: `Bearer ${tokenToUse}`,
+            "Content-Type": "application/json",
+          },
+        }
       );
+
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        // Clear UI state for any error response
+        setUsername("");
+        setUserSecurityLevel(0);
+        setIsUserMenuOpen(false);
+        setIsMobileMenuOpen(false);
+        setShowLoginModal(false);
+        setShowRegisterModal(false);
+        
+        // Only log specific error messages for debugging
+        if (response.status === 401) {
+          console.log("User not authenticated");
+        } else if (response.status === 404) {
+          console.log("User data not found");
+        }
+        return;
       }
+
       const data = await response.json();
       setUsername(data.email);
+      
+      // Get the user's maximum security level from their roles
+      const maxLevel = Math.max(...data.roles.map(role => role.security_level), 0);
+      setUserSecurityLevel(maxLevel);
     } catch (error) {
+      // Clear UI state for any error
+      setUsername("");
+      setUserSecurityLevel(0);
+      setIsUserMenuOpen(false);
+      setIsMobileMenuOpen(false);
+      setShowLoginModal(false);
+      setShowRegisterModal(false);
       console.error("Error fetching user data:", error);
-      if (error.message.includes("401")) {
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('tokenTimestamp');
-        setUsername("");
-      }
     }
   }
 
-  const handleLogout = () => {
-    logout();
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('tokenTimestamp');
-    setUsername("");
+  const handleLogout = async () => {
+    try {
+      // First clear all UI state
+      setUsername("");
+      setUserSecurityLevel(0);
+      setIsUserMenuOpen(false);
+      setIsMobileMenuOpen(false);
+      setShowLoginModal(false);
+      setShowRegisterModal(false);
+      setLoginSuccessMessage("");
+      
+      // Clear local storage
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('tokenTimestamp');
+      
+      // Call logout from useToken hook and wait for it to complete
+      await logout();
+      
+      // Force a re-render by updating the changed state
+      setChanged(prev => !prev);
+      
+      // Redirect to home page if on a protected route
+      const protectedRoutes = ['/profile', '/profile/update', '/manage-users'];
+      if (protectedRoutes.includes(location.pathname)) {
+        navigate('/');
+      }
+    } catch (error) {
+      console.error('Error during logout:', error);
+    }
   };
 
   const switchToRegister = () => {
@@ -101,6 +154,43 @@ function Navbar() {
     setLoginSuccessMessage(message || "");
   };
 
+  // Add a new useEffect to update when token changes
+  useEffect(() => {
+    const checkToken = async () => {
+      if (!token) {
+        // Clear all UI state when token is not present
+        setUsername("");
+        setUserSecurityLevel(0);
+        setIsUserMenuOpen(false);
+        setIsMobileMenuOpen(false);
+        setShowLoginModal(false);
+        setShowRegisterModal(false);
+        setLoginSuccessMessage("");
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('tokenTimestamp');
+        return;
+      }
+      
+      try {
+        await getUser();
+      } catch (error) {
+        console.error("Error checking token:", error);
+        // Clear UI state on error
+        setUsername("");
+        setUserSecurityLevel(0);
+        setIsUserMenuOpen(false);
+        setIsMobileMenuOpen(false);
+        setShowLoginModal(false);
+        setShowRegisterModal(false);
+        setLoginSuccessMessage("");
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('tokenTimestamp');
+      }
+    };
+    
+    checkToken();
+  }, [token]);
+
   useEffect(() => {
     onNav();
     getUser();
@@ -114,7 +204,9 @@ function Navbar() {
     };
 
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
 
   const handleUserMenuAction = (option) => {
@@ -122,6 +214,7 @@ function Navbar() {
       handleLogout();
     }
     setIsUserMenuOpen(false);
+    setIsMobileMenuOpen(false);
   };
 
   return (
@@ -171,8 +264,13 @@ function Navbar() {
                   {isUserMenuOpen && (
                     <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5">
                       <div className="py-1" role="menu">
-                        {userMenuOptions.map((option) => (
-                          option.action ? (
+                        {userMenuOptions.map((option) => {
+                          // Skip options that require higher security level
+                          if (option.securityLevel && userSecurityLevel < option.securityLevel) {
+                            return null;
+                          }
+                          
+                          return option.action ? (
                             <button
                               key={option.name}
                               onClick={() => handleUserMenuAction(option)}
@@ -188,6 +286,7 @@ function Navbar() {
                             <Link
                               key={option.name}
                               to={option.href}
+                              onClick={() => handleUserMenuAction(option)}
                               className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                               role="menuitem"
                             >
@@ -196,8 +295,8 @@ function Navbar() {
                               </svg>
                               {option.name}
                             </Link>
-                          )
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -249,6 +348,14 @@ function Navbar() {
                 {item.name}
               </Link>
             ))}
+            {username && userSecurityLevel >= 10 && (
+              <Link
+                to="/manage-users"
+                className="text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white block px-3 py-2 rounded-md text-base font-medium"
+              >
+                Manage Users
+              </Link>
+            )}
             {username ? (
               <button
                 onClick={handleLogout}

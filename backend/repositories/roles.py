@@ -196,6 +196,7 @@ class RolesRepository:
             record = result.fetchone()
             created_at = parse_datetime(record[0]) if record else None
             updated_at = parse_datetime(record[1]) if record else None
+            last_login = parse_datetime(user.last_login) if user.last_login else None
 
         return UserWithRoles(
             user_id=user.user_id,
@@ -205,7 +206,7 @@ class RolesRepository:
             roles=roles,
             created_at=created_at,
             updated_at=updated_at,
-            last_login=user.last_login,
+            last_login=last_login,
         )
 
     def get_user_max_security_level(self, user_id: int) -> int:

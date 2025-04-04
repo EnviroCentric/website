@@ -140,8 +140,11 @@ async def assign_role(
             detail=f"User with ID {user_id} not found",
         )
 
+    # Get current user's maximum security level
+    current_user_level = roles_repo.get_user_max_security_level(current_user["user_id"])
+
     # Prevent assigning roles with higher security level than the current user
-    if role.security_level > current_user["security_level"]:
+    if role.security_level > current_user_level:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot assign role with higher security level",
@@ -182,8 +185,11 @@ async def remove_role(
             detail=f"User with ID {user_id} not found",
         )
 
+    # Get current user's maximum security level
+    current_user_level = roles_repo.get_user_max_security_level(current_user["user_id"])
+
     # Prevent removing roles with higher security level than the current user
-    if role.security_level > current_user["security_level"]:
+    if role.security_level > current_user_level:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot remove role with higher security level",

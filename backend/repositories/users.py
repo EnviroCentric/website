@@ -93,7 +93,8 @@ class UsersRepository:
     def get_all_users(self) -> Union[List[UserOut], Error]:
         try:
             with DatabaseConnection.get_db() as db:
-                result = db.execute(load_sql_template("users/get_all_users.sql"))
+                sql = load_sql_template("users/get_all_users.sql")
+                result = db.execute(sql)
                 return [self.record_to_user_out(record) for record in result]
         except Exception as e:
             print(e)

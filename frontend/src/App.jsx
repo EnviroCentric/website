@@ -4,7 +4,10 @@ import {
   Routes,
   Route,
 } from "react-router-dom";
-import Home from './Home';
+import Home from './pages/Home';
+import UserManagement from './pages/UserManagement';
+import ProfileUpdate from './pages/ProfileUpdate';
+import Profile from './pages/Profile';
 import { AuthProvider } from "@galvanize-inc/jwtdown-for-react";
 import Navbar from './components/Navbar';
 import { ThemeProvider } from './context/ThemeContext';
@@ -28,6 +31,9 @@ function AppContent() {
       <main className="pt-16 pb-6 min-h-[calc(100vh-4rem)] bg-white dark:bg-gray-900">
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/manage-users" element={<UserManagement />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/profile/update" element={<ProfileUpdate />} />
         </Routes>
       </main>
     </div>
@@ -38,7 +44,7 @@ function App() {
   return (
     <AuthProvider baseUrl={import.meta.env.VITE_API_URL}>
       <ThemeProvider>
-        <BrowserRouter>
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <AppContent />
         </BrowserRouter>
       </ThemeProvider>

@@ -3,14 +3,14 @@
 -- We don't need to create them manually
 
 -- Create the database if it doesn't exist
-CREATE DATABASE temp;
+CREATE DATABASE ${POSTGRES_DB};
 
 -- Connect to the new database
-\c temp
+\c ${POSTGRES_DB}
 
 -- Grant schema privileges to the default user
-ALTER DEFAULT PRIVILEGES GRANT ALL ON TABLES TO temp;
-ALTER DEFAULT PRIVILEGES GRANT ALL ON SEQUENCES TO temp;
+ALTER DEFAULT PRIVILEGES GRANT ALL ON TABLES TO ${POSTGRES_USER};
+ALTER DEFAULT PRIVILEGES GRANT ALL ON SEQUENCES TO ${POSTGRES_USER};
 
 -- Grant schema privileges
 \c ${POSTGRES_DB}
