@@ -5,6 +5,7 @@ from routers.roles import router as roles_router
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import subprocess
+from routers import users, roles, pages
 
 # Run database migrations
 print("Running database migrations...")
@@ -28,9 +29,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(users_router, tags=["users"])
-app.include_router(authenticator.router, tags=["users"])
-app.include_router(roles_router, tags=["roles"])
+# Authentication routes
+app.include_router(authenticator.router, tags=["Authentication"])
+
+# User management routes
+app.include_router(users_router, tags=["Users"])
+app.include_router(users.router, tags=["Users"])
+
+# Role management routes
+app.include_router(roles_router, tags=["Roles"])
+app.include_router(roles.router, tags=["Roles"])
+
+# Access management routes
+app.include_router(pages.router, tags=["Access Management"])
 
 
 @app.get("/")

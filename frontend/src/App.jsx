@@ -9,6 +9,7 @@ import UserManagement from './pages/UserManagement';
 import ProfileUpdate from './pages/ProfileUpdate';
 import Profile from './pages/Profile';
 import RoleManagement from './pages/RoleManagement';
+import AccessManagement from './pages/AccessManagement';
 import { AuthProvider } from "@galvanize-inc/jwtdown-for-react";
 import Navbar from './components/Navbar';
 import { ThemeProvider } from './context/ThemeContext';
@@ -36,6 +37,7 @@ function AppContent() {
           <Route path="/profile" element={<Profile />} />
           <Route path="/profile/update" element={<ProfileUpdate />} />
           <Route path="/manage-roles" element={<RoleManagement />} />
+          <Route path="/access-management" element={<AccessManagement />} />
         </Routes>
       </main>
     </div>

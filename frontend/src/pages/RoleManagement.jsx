@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getCachedToken } from '../components/Auth';
-import RoleModal from '../components/RoleModal';
+import DraggableModal from '../components/DraggableModal';
 
 const SORT_OPTIONS = {
   LEVEL_DESC: 'level_desc',
@@ -21,6 +21,11 @@ function RoleManagement() {
   const [success, setSuccess] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState(null);
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    security_level: 1,
+  });
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -284,15 +289,82 @@ function RoleManagement() {
         </div>
       </div>
 
-      <RoleModal
+      <DraggableModal
         isOpen={isModalOpen}
         onClose={() => {
           setIsModalOpen(false);
           setSelectedRole(null);
         }}
-        onSubmit={handleCreateOrUpdateRole}
-        role={selectedRole}
-      />
+      >
+        <div className="p-6">
+          <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">
+            {selectedRole ? 'Edit Role' : 'Create New Role'}
+          </h2>
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            handleCreateOrUpdateRole(formData);
+          }}>
+            <div className="mb-4">
+              <label className="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2">
+                Role Name
+              </label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="shadow appearance-none border dark:border-gray-600 rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+                required
+              />
+            </div>
+            <div className="mb-4">
+              <label className="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2">
+                Description
+              </label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                className="shadow appearance-none border dark:border-gray-600 rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+                rows="3"
+              />
+            </div>
+            <div className="mb-6">
+              <label className="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2">
+                Security Level
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="10"
+                value={formData.security_level}
+                onChange={(e) => {
+                  let value = parseInt(e.target.value) || 1;
+                  if (value > 10) value = 10;
+                  if (value < 1) value = 1;
+                  setFormData({ ...formData, security_level: value });
+                }}
+                onBlur={(e) => {
+                  let value = parseInt(e.target.value) || 1;
+                  if (value > 10) value = 10;
+                  if (value < 1) value = 1;
+                  e.target.value = value;
+                  setFormData({ ...formData, security_level: value });
+                }}
+                onFocus={(e) => e.target.select()}
+                className="shadow appearance-none border dark:border-gray-600 rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+                required
+              />
+            </div>
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                className="bg-blue-500 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+              >
+                {selectedRole ? 'Save Changes' : 'Create Role'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </DraggableModal>
     </div>
   );
 }
