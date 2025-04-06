@@ -11,7 +11,10 @@ function Home() {
 
   useEffect(() => {
     const fetchUserData = async () => {
-      if (!token) return;
+      if (!token) {
+        setUserData(null);
+        return;
+      }
       
       try {
         const response = await fetch(`${import.meta.env.VITE_API_URL}/users/self`, {
@@ -29,10 +32,18 @@ function Home() {
         setUserData(data);
       } catch (error) {
         console.error('Error fetching user data:', error);
+        setUserData(null);
       }
     };
 
     fetchUserData();
+  }, [token]);
+
+  // Clear user data when token is removed
+  useEffect(() => {
+    if (!token) {
+      setUserData(null);
+    }
   }, [token]);
 
   const handleSwitchToLogin = () => {

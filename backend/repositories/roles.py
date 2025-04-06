@@ -222,3 +222,67 @@ class RolesRepository:
         except Exception as e:
             print(f"Error getting user max security level: {e}")
             return 0
+
+    def get_role_by_id(self, role_id: int) -> Optional[Role]:
+        """Get a role by its ID."""
+        try:
+            with DatabaseConnection.get_db() as db:
+                result = db.execute(
+                    load_sql_template("roles/get_role_by_id.sql"),
+                    [role_id],
+                )
+                record = result.fetchone()
+                if record is None:
+                    return None
+                return Role(
+                    role_id=record[0],
+                    name=record[1],
+                    description=record[2],
+                    security_level=record[3],
+                    created_at=parse_datetime(record[4]),
+                    updated_at=parse_datetime(record[5]),
+                )
+        except Exception as e:
+            print(f"Error getting role by ID: {e}")
+            return None
+
+    def delete_role(self, role_id: int) -> bool:
+        """Delete a role by its ID."""
+        try:
+            with DatabaseConnection.get_db() as db:
+                # First delete user-role associations
+                db.execute(
+                    load_sql_template("roles/delete_user_roles.sql"),
+                    [role_id],
+                )
+                # Then delete the role
+                db.execute(
+                    load_sql_template("roles/delete_role.sql"),
+                    [role_id],
+                )
+                return True
+        except Exception as e:
+            print(f"Error deleting role: {e}")
+            return False
+
+    def update_role(self, role_id: int, role: RoleCreate) -> Optional[Role]:
+        try:
+            with DatabaseConnection.get_db() as db:
+                result = db.execute(
+                    load_sql_template("roles/update_role.sql"),
+                    [role.name, role.description, role.security_level, role_id],
+                )
+                record = result.fetchone()
+                if record:
+                    return Role(
+                        role_id=record[0],
+                        name=record[1],
+                        description=record[2],
+                        security_level=record[3],
+                        created_at=parse_datetime(record[4]),
+                        updated_at=parse_datetime(record[5]),
+                    )
+                return None
+        except Exception as e:
+            print(f"Error updating role: {e}")
+            return None

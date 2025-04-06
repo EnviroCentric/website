@@ -161,19 +161,6 @@ const ProfileUpdate = () => {
       }));
 
       setSuccessMessage('Profile updated successfully!');
-      
-      // Force a re-fetch of user data in all components
-      const userDataResponse = await fetch(`${import.meta.env.VITE_API_URL}/users/self`, {
-        credentials: 'include',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      
-      if (userDataResponse.ok) {
-        // Trigger a page reload to update all components
-        window.location.reload();
-      }
     } catch (error) {
       setErrors({ submit: error.message });
     } finally {

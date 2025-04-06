@@ -2,6 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import useToken from "@galvanize-inc/jwtdown-for-react";
 import { useNavigate } from 'react-router-dom';
 
+const SORT_OPTIONS = {
+  ROLE_DESC: 'role_desc',
+  ROLE_ASC: 'role_asc',
+  ALPHA_ASC: 'alpha_asc',
+  ALPHA_DESC: 'alpha_desc',
+};
+
 function UserManagement() {
   const { token } = useToken();
   const navigate = useNavigate();
@@ -16,6 +23,7 @@ function UserManagement() {
   const [userRoles, setUserRoles] = useState([]);
   const [hasAccess, setHasAccess] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
+  const [sortBy, setSortBy] = useState(SORT_OPTIONS.ROLE_DESC);
   const modalRef = useRef(null);
 
   useEffect(() => {
@@ -91,9 +99,25 @@ function UserManagement() {
         user.first_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         user.last_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         user.email.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+      )
+      .sort((a, b) => {
+        switch (sortBy) {
+          case SORT_OPTIONS.ROLE_DESC:
+            return Math.max(...(b.roles || []).map(r => r.security_level)) - 
+                   Math.max(...(a.roles || []).map(r => r.security_level));
+          case SORT_OPTIONS.ROLE_ASC:
+            return Math.max(...(a.roles || []).map(r => r.security_level)) - 
+                   Math.max(...(b.roles || []).map(r => r.security_level));
+          case SORT_OPTIONS.ALPHA_ASC:
+            return (a.first_name + a.last_name).localeCompare(b.first_name + b.last_name);
+          case SORT_OPTIONS.ALPHA_DESC:
+            return (b.first_name + b.last_name).localeCompare(a.first_name + a.last_name);
+          default:
+            return 0;
+        }
+      });
     setFilteredUsers(filtered);
-  }, [searchQuery, users, currentUserId]);
+  }, [searchQuery, users, currentUserId, sortBy]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -289,20 +313,36 @@ function UserManagement() {
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-8 text-gray-900 dark:text-white">User Management</h1>
       
-      {/* Search Bar */}
-      <div className="mb-6">
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="Search users..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-          />
-          <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-            <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+      {/* Sticky Search and Sort Bar */}
+      <div className="sticky top-16 z-10 bg-white dark:bg-gray-800 shadow-lg rounded-lg p-4 mb-6">
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex-1">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search users..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              />
+              <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center">
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value={SORT_OPTIONS.ROLE_DESC}>Security Level (High to Low)</option>
+              <option value={SORT_OPTIONS.ROLE_ASC}>Security Level (Low to High)</option>
+              <option value={SORT_OPTIONS.ALPHA_ASC}>Name (A to Z)</option>
+              <option value={SORT_OPTIONS.ALPHA_DESC}>Name (Z to A)</option>
+            </select>
           </div>
         </div>
       </div>

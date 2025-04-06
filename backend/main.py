@@ -38,11 +38,6 @@ def root():
     return {"message": "Welcome to the backend!"}
 
 
-@app.get("/health")
-def health_check():
-    return {"status": "healthy"}
-
-
 # Only create Lambda handler if running in AWS Lambda
 if os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
     try:

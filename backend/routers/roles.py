@@ -230,3 +230,78 @@ async def get_user_roles(
         )
 
     return roles_repo.get_user_with_roles(user)
+
+
+@router.delete("/roles/{role_id}", response_model=dict)
+async def delete_role(
+    role_id: int,
+    roles_repo: RolesRepository = Depends(get_roles_repo),
+    _: dict = Depends(require_admin()),
+):
+    """Delete a role (admin only)"""
+    # Check if role exists
+    role = roles_repo.get_role_by_id(role_id)
+    if not role:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Role with ID {role_id} not found",
+        )
+
+    # Check if it's the admin role
+    if role.name.lower() == "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot delete the admin role",
+        )
+
+    # Delete the role
+    if roles_repo.delete_role(role_id):
+        return {"message": f"Role '{role.name}' deleted successfully"}
+
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="Failed to delete role",
+    )
+
+
+@router.put("/roles/{role_id}", response_model=Role)
+async def update_role(
+    role_id: int,
+    role: RoleCreate,
+    roles_repo: RolesRepository = Depends(get_roles_repo),
+    _: dict = Depends(require_admin()),
+):
+    """Update a role (admin only)"""
+    # Check if role exists
+    existing_role = roles_repo.get_role_by_id(role_id)
+    if not existing_role:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Role with ID {role_id} not found",
+        )
+
+    # Check if it's the admin role and prevent security level change
+    if existing_role.name.lower() == "admin":
+        if role.security_level != 10:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot change admin role security level",
+            )
+
+    # Check if new name already exists (if name is being changed)
+    if role.name != existing_role.name:
+        name_check = roles_repo.get_role(role.name)
+        if name_check:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Role name '{role.name}' already exists",
+            )
+
+    # Update the role
+    updated_role = roles_repo.update_role(role_id, role)
+    if not updated_role:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not update role",
+        )
+    return updated_role

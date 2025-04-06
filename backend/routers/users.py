@@ -26,6 +26,8 @@ from repositories.roles import RolesRepository
 from typing import Union, List
 import os
 from routers.roles import require_security_level
+import random
+import string
 
 
 router = APIRouter()
@@ -224,3 +226,96 @@ async def create_admin_user(
         "is_admin": True,
     }
     return AccountToken(account=user_dict, **token.dict())
+
+
+@router.post("/users/generate-test-accounts", response_model=List[UserOut])
+async def generate_test_accounts(
+    repo: UsersRepository = Depends(),
+    _: dict = Depends(
+        require_security_level(5)
+    ),  # Only admins can generate test accounts
+):
+    """
+    Generate 10 test accounts with random information.
+    This endpoint is only accessible to users with security level 5 or higher.
+    """
+    test_accounts = []
+
+    # List of common first and last names for variety
+    first_names = [
+        "John",
+        "Jane",
+        "Michael",
+        "Emily",
+        "David",
+        "Sarah",
+        "Robert",
+        "Lisa",
+        "William",
+        "Jennifer",
+        "James",
+        "Jessica",
+        "Thomas",
+        "Amanda",
+        "Daniel",
+    ]
+    last_names = [
+        "Smith",
+        "Johnson",
+        "Williams",
+        "Brown",
+        "Jones",
+        "Garcia",
+        "Miller",
+        "Davis",
+        "Rodriguez",
+        "Martinez",
+        "Hernandez",
+        "Lopez",
+        "Gonzalez",
+    ]
+
+    # Define allowed special characters based on the validator
+    allowed_special_chars = '!@#$%^&*(),.?":{}|<>'
+
+    for _ in range(10):
+        # Generate random user information
+        first_name = random.choice(first_names)
+        last_name = random.choice(last_names)
+        email = f"{first_name.lower()}.{last_name.lower()}{random.randint(100,999)}@test.com"
+
+        # Generate password that meets all requirements
+        # At least 12 characters, with at least one uppercase, one number, and one special char
+        password = (
+            random.choice(string.ascii_uppercase)  # At least one uppercase
+            + random.choice(string.digits)  # At least one number
+            + random.choice(allowed_special_chars)  # At least one special char
+            + "".join(
+                random.choices(  # Remaining characters
+                    string.ascii_letters + string.digits + allowed_special_chars, k=9
+                )
+            )
+        )
+        # Shuffle the password to make it more random
+        password = "".join(random.sample(password, len(password)))
+
+        # Create user info object
+        user_info = UserIn(
+            email=email,
+            first_name=first_name,
+            last_name=last_name,
+            password=password,
+            password_confirmation=password,
+        )
+
+        try:
+            # Hash the password
+            hashed_password = authenticator.hash_password(password)
+            # Create the user
+            user = repo.create_user(user_info, hashed_password)
+            test_accounts.append(user)
+        except DuplicateUserError:
+            # If email already exists, try again with a different random number
+            continue
+
+    return test_accounts

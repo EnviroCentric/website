@@ -246,7 +246,10 @@ export default function RegisterForm({ onClose, onSwitchToLogin }) {
               {alert.showLogin && (
                 <div className="mt-2">
                   <button
-                    onClick={onSwitchToLogin}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      onSwitchToLogin();
+                    }}
                     type="button"
                     className="text-blue-600 hover:text-blue-800 font-semibold"
                   >
@@ -264,7 +267,10 @@ export default function RegisterForm({ onClose, onSwitchToLogin }) {
               Create Account
             </button>
             <button
-              onClick={onSwitchToLogin}
+              onClick={(e) => {
+                e.preventDefault();
+                onSwitchToLogin();
+              }}
               type="button"
               className="w-full text-center font-bold text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-300"
             >
