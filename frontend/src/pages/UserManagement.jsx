@@ -33,7 +33,7 @@ function UserManagement() {
       }
 
       try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/roles/check-permission`, {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/roles/check-permission`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -75,7 +75,7 @@ function UserManagement() {
 
   const loadData = async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/users/management-data`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users/management-data`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -169,7 +169,7 @@ function UserManagement() {
       };
 
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/users/${selectedUser.user_id}/roles/batch`,
+        `${import.meta.env.VITE_API_URL}/api/users/${selectedUser.user_id}/roles/batch`,
         {
           method: 'PUT',
           headers: {

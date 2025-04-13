@@ -23,7 +23,7 @@ export default function AccessManagement() {
 
     const checkAccess = async () => {
       try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/users/self`, {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users/self`, {
           headers: {
             'Authorization': `Bearer ${token}`,
           },
@@ -61,12 +61,12 @@ export default function AccessManagement() {
     try {
       const apiUrl = import.meta.env.VITE_API_URL;
       const [rolesResponse, permissionsResponse] = await Promise.all([
-        fetch(`${apiUrl}/roles`, {
+        fetch(`${apiUrl}/api/roles`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
         }),
-        fetch(`${apiUrl}/roles/permissions`, {
+        fetch(`${apiUrl}/api/roles/permissions`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -98,7 +98,7 @@ export default function AccessManagement() {
   const handleRoleSelect = async (role) => {
     setSelectedRole(role);
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/roles/${role.role_id}/permissions`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/roles/${role.role_id}/permissions`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -173,7 +173,7 @@ export default function AccessManagement() {
           ...changes.added
         ];
 
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/roles/${roleId}/permissions`, {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/roles/${roleId}/permissions`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',

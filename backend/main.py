@@ -32,10 +32,10 @@ app.add_middleware(
 app.include_router(authenticator.router, tags=["Authentication"])
 
 # User management routes
-app.include_router(users_router, tags=["Users"])
+app.include_router(users_router, prefix="/api", tags=["Users"])
 
 # Role management routes
-app.include_router(roles_router, tags=["Roles"])
+app.include_router(roles_router, prefix="/api", tags=["Roles"])
 
 
 @app.get("/")

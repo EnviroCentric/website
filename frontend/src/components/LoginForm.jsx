@@ -29,7 +29,7 @@ function LoginForm({ onClose, onSwitchToRegister, onLoginSuccess, successMessage
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg">
+    <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg w-full max-w-md mx-auto">
       <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">Login</h2>
       {successMessage && (
         <div className="mb-4 bg-green-100 dark:bg-green-900/20 border border-green-400 dark:border-green-500 text-green-700 dark:text-green-400 px-4 py-3 rounded">
@@ -68,10 +68,10 @@ function LoginForm({ onClose, onSwitchToRegister, onLoginSuccess, successMessage
             required
           />
         </div>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col items-center gap-4">
           <button
             type="submit"
-            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             Login
           </button>

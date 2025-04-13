@@ -28,7 +28,7 @@ const Profile = () => {
     const fetchUserData = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/users/self`, {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users/self`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },

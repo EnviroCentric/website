@@ -20,7 +20,7 @@ const ProfileUpdate = () => {
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/users/self`, {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users/self`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -127,7 +127,7 @@ const ProfileUpdate = () => {
 
     try {
       setIsLoading(true);
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/users/self`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users/self`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -146,7 +146,7 @@ const ProfileUpdate = () => {
       localStorage.removeItem('tokenTimestamp');
 
       // Then make the logout API call
-      await fetch(`${import.meta.env.VITE_API_URL}/token`, {
+      await fetch(`${import.meta.env.VITE_API_URL}/api/token`, {
         method: 'DELETE',
         credentials: 'include',
         headers: {
