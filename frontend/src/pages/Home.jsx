@@ -1,53 +1,35 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import Modal from '../components/Modal';
 import RegisterForm from '../components/RegisterForm';
-import useToken from "@galvanize-inc/jwtdown-for-react";
+import LoginForm from '../components/LoginForm';
 
 function Home() {
   const [showRegisterModal, setShowRegisterModal] = useState(false);
-  const { token } = useToken();
-  const [userData, setUserData] = useState(null);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loginMessage, setLoginMessage] = useState('');
+  const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
 
+  // Handle URL parameters for showing login modal
   useEffect(() => {
-    const fetchUserData = async () => {
-      if (!token) {
-        setUserData(null);
-        return;
-      }
-      
-      try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/users/self`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        });
-        
-        if (!response.ok) {
-          throw new Error('Failed to fetch user data');
-        }
-        
-        const data = await response.json();
-        setUserData(data);
-      } catch (error) {
-        console.error('Error fetching user data:', error);
-        setUserData(null);
-      }
-    };
-
-    fetchUserData();
-  }, [token]);
-
-  // Clear user data when token is removed
-  useEffect(() => {
-    if (!token) {
-      setUserData(null);
+    const showLogin = searchParams.get('showLogin');
+    const message = searchParams.get('message');
+    
+    if (showLogin === 'true') {
+      setShowLoginModal(true);
+      setLoginMessage(message || '');
+      // Clear the parameters from URL
+      searchParams.delete('showLogin');
+      searchParams.delete('message');
+      setSearchParams(searchParams);
     }
-  }, [token]);
+  }, [searchParams, setSearchParams]);
 
   const handleSwitchToLogin = () => {
     setShowRegisterModal(false);
+    setShowLoginModal(true);
   };
 
   return (
@@ -56,12 +38,12 @@ function Home() {
       <section className="min-h-[80vh] flex items-center justify-center text-center bg-gradient-to-br from-gray-50 to-gray-200 dark:from-gray-800 dark:to-gray-900 rounded-lg">
         <div className="max-w-3xl p-10">
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-white mb-6">
-            {userData ? `Welcome back, ${userData.first_name}!` : 'Welcome to Your App'}
+            {user ? `Welcome back, ${user.first_name.charAt(0).toUpperCase() + user.first_name.slice(1)}!` : 'Welcome to Your App'}
           </h1>
           <p className="text-xl text-gray-700 dark:text-gray-300 mb-8">
-            {userData ? 'Your one-stop solution for amazing experiences' : 'Your one-stop solution for amazing experiences'}
+            {user ? 'Your one-stop solution for amazing experiences' : 'Your one-stop solution for amazing experiences'}
           </p>
-          {!userData && (
+          {!user && (
             <button
               onClick={() => setShowRegisterModal(true)}
               className="inline-block px-8 py-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors duration-300"
@@ -69,7 +51,7 @@ function Home() {
               Get Started
             </button>
           )}
-          {userData && (
+          {user && (
             <div className="space-y-4">
               <Link
                 to="/profile"
@@ -122,7 +104,7 @@ function Home() {
       </section>
 
       {/* Call to Action */}
-      {!userData && (
+      {!user && (
         <section className="py-16 text-center bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg">
           <h2 className="text-3xl md:text-4xl font-bold mb-6">
             Ready to Get Started?
@@ -143,6 +125,18 @@ function Home() {
         <RegisterForm
           onClose={() => setShowRegisterModal(false)}
           onSwitchToLogin={handleSwitchToLogin}
+        />
+      </Modal>
+
+      <Modal isOpen={showLoginModal} onClose={() => setShowLoginModal(false)}>
+        <LoginForm
+          onClose={() => setShowLoginModal(false)}
+          onSwitchToRegister={() => {
+            setShowLoginModal(false);
+            setShowRegisterModal(true);
+          }}
+          onLoginSuccess={() => setShowLoginModal(false)}
+          successMessage={loginMessage}
         />
       </Modal>
     </div>

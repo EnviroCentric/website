@@ -8,7 +8,22 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     watch: {
-        usePolling: true
-    }
+      usePolling: true
+    },
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      '/token': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      '/users': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+    },
+    historyApiFallback: true,
   }
 })

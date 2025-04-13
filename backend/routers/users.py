@@ -20,12 +20,12 @@ from models.users import (
     AdminUserIn,
 )
 from models.auth import AccountForm, AccountToken
-from models.roles import UserWithRoles
+from models.roles import UserWithRoles, Role
 from repositories.users import UsersRepository
 from repositories.roles import RolesRepository
-from typing import Union, List
+from typing import Union, List, Dict, Any
 import os
-from routers.roles import require_security_level
+from utils.permissions import require_permission
 import random
 import string
 
@@ -39,6 +39,26 @@ if not ADMIN_CREATION_SECRET:
         "ADMIN_CREATION_SECRET environment variable is not set. "
         "Please set it before running the application."
     )
+
+
+def user_to_dict(user: UserOut) -> Dict[str, Any]:
+    """Convert a User model to a dictionary."""
+    return {
+        "user_id": user.user_id,
+        "email": user.email,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "roles": (
+            [role_to_dict(role) for role in user.roles]
+            if hasattr(user, "roles")
+            else []
+        ),
+    }
+
+
+def role_to_dict(role: Role) -> Dict[str, Any]:
+    """Convert a Role model to a dictionary."""
+    return {"role_id": role.role_id, "name": role.name, "description": role.description}
 
 
 @router.post("/users", response_model=AccountToken | HttpError)
@@ -78,12 +98,12 @@ async def create_user(
     return AccountToken(account=user_dict, **token.dict())
 
 
-@router.get("/users", response_model=Union[Error, List[UserOut]])
+@router.get("/users", response_model=List[UserWithRoles])
 def get_all_users(
     repo: UsersRepository = Depends(),
-    _: dict = Depends(require_security_level(5)),
+    _: dict = Depends(require_permission("manage_users")),
 ):
-    """Get all users (requires security level 5 or higher)"""
+    """Get all users (requires manage_users permission)"""
     return repo.get_all_users()
 
 
@@ -231,13 +251,11 @@ async def create_admin_user(
 @router.post("/users/generate-test-accounts", response_model=List[UserOut])
 async def generate_test_accounts(
     repo: UsersRepository = Depends(),
-    _: dict = Depends(
-        require_security_level(5)
-    ),  # Only admins can generate test accounts
+    _: dict = Depends(require_permission("manage_users")),
 ):
     """
     Generate 10 test accounts with random information.
-    This endpoint is only accessible to users with security level 5 or higher.
+    This endpoint is only accessible to users with manage_users permission.
     """
     test_accounts = []
 
@@ -319,3 +337,54 @@ async def generate_test_accounts(
             continue
 
     return test_accounts
+
+
+@router.get("/users/management-data", response_model=dict)
+async def get_management_data(
+    repo: UsersRepository = Depends(),
+    roles_repo: RolesRepository = Depends(),
+    _: dict = Depends(require_permission("manage_users")),
+):
+    """
+    Get combined user and role data for management interface.
+    """
+    users = repo.get_all_users()
+    roles = roles_repo.get_all_roles()
+
+    return {
+        "users": [user_to_dict(user) for user in users],
+        "roles": [role_to_dict(role) for role in roles],
+    }
+
+
+@router.put("/users/{user_id}/roles/batch", response_model=dict)
+async def update_user_roles_batch(
+    user_id: int,
+    role_changes: dict,
+    repo: UsersRepository = Depends(),
+    roles_repo: RolesRepository = Depends(),
+    _: dict = Depends(require_permission("manage_users")),
+):
+    """
+    Update multiple roles for a user in a single request.
+    """
+    user = repo.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    try:
+        # Process role additions
+        for role_id in role_changes.get("add", []):
+            role = roles_repo.get_role_by_id(role_id)
+            if role and role not in user.roles:
+                roles_repo.assign_role(user_id, role_id)
+
+        # Process role removals
+        for role_id in role_changes.get("remove", []):
+            role = roles_repo.get_role_by_id(role_id)
+            if role and role in user.roles:
+                roles_repo.remove_role(user_id, role_id)
+
+        return {"message": "User roles updated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))

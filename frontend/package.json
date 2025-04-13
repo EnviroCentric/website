@@ -10,7 +10,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@galvanize-inc/jwtdown-for-react": "^0.2.4",
     "@tailwindcss/vite": "^4.0.17",
     "prop-types": "^15.8.1",
     "react": "^18.2.0",

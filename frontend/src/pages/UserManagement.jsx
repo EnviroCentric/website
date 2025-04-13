@@ -1,17 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import useToken from "@galvanize-inc/jwtdown-for-react";
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import DraggableModal from '../components/DraggableModal';
 
 const SORT_OPTIONS = {
-  ROLE_DESC: 'role_desc',
-  ROLE_ASC: 'role_asc',
   ALPHA_ASC: 'alpha_asc',
   ALPHA_DESC: 'alpha_desc',
 };
 
 function UserManagement() {
-  const { token } = useToken();
+  const { token, user } = useAuth();
   const navigate = useNavigate();
   const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
@@ -23,8 +21,7 @@ function UserManagement() {
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [userRoles, setUserRoles] = useState([]);
   const [hasAccess, setHasAccess] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState(null);
-  const [sortBy, setSortBy] = useState(SORT_OPTIONS.ROLE_DESC);
+  const [sortBy, setSortBy] = useState(SORT_OPTIONS.ALPHA_ASC);
   const modalRef = useRef(null);
 
   useEffect(() => {
@@ -36,31 +33,23 @@ function UserManagement() {
       }
 
       try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/users/self`, {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/roles/check-permission`, {
+          method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
+          body: JSON.stringify({ permission: 'manage_users' })
         });
         
         if (!response.ok) {
           throw new Error('Failed to verify access');
         }
         
-        const userData = await response.json();
-        const userRoles = userData.roles || [];
+        const data = await response.json();
+        setHasAccess(data.has_permission);
         
-        // Store current user's ID
-        setCurrentUserId(userData.user_id);
-        
-        // Check if user has admin role or appropriate security level
-        const hasRequiredAccess = userRoles.some(role => 
-          role.name === 'admin' || role.security_level >= 10
-        );
-        
-        setHasAccess(hasRequiredAccess);
-        
-        if (hasRequiredAccess) {
+        if (data.has_permission) {
           await loadData();
         } else {
           navigate('/');
@@ -86,7 +75,20 @@ function UserManagement() {
 
   const loadData = async () => {
     try {
-      await Promise.all([fetchUsers(), fetchRoles()]);
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/users/management-data`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch management data');
+      }
+
+      const data = await response.json();
+      setUsers(data.users);
+      setFilteredUsers(data.users);
+      setRoles(data.roles);
     } catch (err) {
       console.error('Error loading data:', err);
       setError('Failed to load data. Please try again.');
@@ -95,20 +97,20 @@ function UserManagement() {
 
   useEffect(() => {
     const filtered = users
-      .filter(user => user.user_id !== currentUserId) // Filter out current user
-      .filter(user => 
-        user.first_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.last_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.email.toLowerCase().includes(searchQuery.toLowerCase())
-      )
+      .filter(user => {
+        const searchLower = searchQuery.toLowerCase();
+        const userRoles = user.roles || [];
+        const roleNames = userRoles.map(role => role.name.toLowerCase()).join(' ');
+        
+        return (
+          user.first_name.toLowerCase().includes(searchLower) ||
+          user.last_name.toLowerCase().includes(searchLower) ||
+          user.email.toLowerCase().includes(searchLower) ||
+          roleNames.includes(searchLower)
+        );
+      })
       .sort((a, b) => {
         switch (sortBy) {
-          case SORT_OPTIONS.ROLE_DESC:
-            return Math.max(...(b.roles || []).map(r => r.security_level)) - 
-                   Math.max(...(a.roles || []).map(r => r.security_level));
-          case SORT_OPTIONS.ROLE_ASC:
-            return Math.max(...(a.roles || []).map(r => r.security_level)) - 
-                   Math.max(...(b.roles || []).map(r => r.security_level));
           case SORT_OPTIONS.ALPHA_ASC:
             return (a.first_name + a.last_name).localeCompare(b.first_name + b.last_name);
           case SORT_OPTIONS.ALPHA_DESC:
@@ -118,7 +120,7 @@ function UserManagement() {
         }
       });
     setFilteredUsers(filtered);
-  }, [searchQuery, users, currentUserId, sortBy]);
+  }, [searchQuery, users, sortBy]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -131,97 +133,22 @@ function UserManagement() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const fetchUsers = async () => {
-    if (!token) return;
-    try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/users`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      if (!response.ok) {
-        throw new Error(`Failed to fetch users: ${response.status}`);
-      }
-      const data = await response.json();
-      
-      // Fetch roles for each user
-      const usersWithRoles = await Promise.all(
-        data.map(async (user) => {
-          const rolesResponse = await fetch(
-            `${import.meta.env.VITE_API_URL}/roles/${user.user_id}`,
-            {
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-              },
-            }
-          );
-          if (rolesResponse.ok) {
-            const userData = await rolesResponse.json();
-            return { ...user, roles: userData.roles };
-          }
-          return user;
-        })
-      );
-      
-      setUsers(usersWithRoles);
-      setFilteredUsers(usersWithRoles);
-    } catch (err) {
-      console.error('Error fetching users:', err);
-      throw err;
-    }
-  };
-
-  const fetchRoles = async () => {
-    if (!token) return;
-    try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/roles`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      if (!response.ok) {
-        throw new Error(`Failed to fetch roles: ${response.status}`);
-      }
-      const data = await response.json();
-      setRoles(data);
-    } catch (err) {
-      console.error('Error fetching roles:', err);
-      throw err;
-    }
-  };
-
   const handleManageRoles = async (user) => {
     try {
-      // Fetch the latest user data to get current roles
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/roles/${user.user_id}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch user data: ${response.status}`);
-      }
-      
-      const userData = await response.json();
-      setSelectedUser(userData);
-      setUserRoles(userData.roles || []);
+      setSelectedUser(user);  // Set the selected user first
+      setUserRoles(user.roles || []);  // Initialize with user's current roles
       setShowRoleModal(true);
     } catch (err) {
-      console.error('Error fetching user roles:', err);
-      setError('Failed to load user roles. Please try again.');
+      console.error('Error managing user roles:', err);
+      setError('Failed to manage user roles. Please try again.');
     }
   };
 
   const handleRoleToggle = (role) => {
     setUserRoles(prevRoles => {
-      const hasRole = prevRoles.some(r => r.name === role.name);
+      const hasRole = prevRoles.some(r => r.role_id === role.role_id);
       if (hasRole) {
-        return prevRoles.filter(r => r.name !== role.name);
+        return prevRoles.filter(r => r.role_id !== role.role_id);
       } else {
         return [...prevRoles, role];
       }
@@ -232,62 +159,49 @@ function UserManagement() {
     if (!selectedUser || !token) return;
 
     try {
-      // Get current roles and new roles
-      const currentRoleNames = (selectedUser.roles || []).map(r => r.name);
-      const newRoleNames = userRoles.map(r => r.name);
+      const roleChanges = {
+        add: userRoles
+          .filter(role => !selectedUser.roles.some(r => r.role_id === role.role_id))
+          .map(role => role.role_id),
+        remove: selectedUser.roles
+          .filter(role => !userRoles.some(r => r.role_id === role.role_id))
+          .map(role => role.role_id)
+      };
 
-      // Find roles to add and remove
-      const rolesToAdd = newRoleNames.filter(name => !currentRoleNames.includes(name));
-      const rolesToRemove = currentRoleNames.filter(name => !newRoleNames.includes(name));
-
-      // Add new roles
-      await Promise.all(
-        rolesToAdd.map(roleName =>
-          fetch(
-            `${import.meta.env.VITE_API_URL}/roles/${selectedUser.user_id}/${roleName}`,
-            {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-              },
-            }
-          )
-        )
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/users/${selectedUser.user_id}/roles/batch`,
+        {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(roleChanges),
+        }
       );
 
-      // Remove old roles
-      await Promise.all(
-        rolesToRemove.map(roleName =>
-          fetch(
-            `${import.meta.env.VITE_API_URL}/roles/${selectedUser.user_id}/${roleName}`,
-            {
-              method: 'DELETE',
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-              },
-            }
-          )
-        )
-      );
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to update roles');
+      }
 
-      // Refresh user list
-      await fetchUsers();
+      // Refresh the users list to show updated roles
+      await loadData();
       setShowRoleModal(false);
       setSelectedUser(null);
       setUserRoles([]);
     } catch (err) {
-      setError(err.message);
-      console.error('Error managing roles:', err);
+      console.error('Error saving roles:', err);
+      setError('Failed to save role changes. Please try again.');
     }
   };
 
-  const getRoleColor = (securityLevel) => {
-    if (securityLevel >= 10) return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
-    if (securityLevel >= 8) return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200';
-    if (securityLevel >= 5) return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
-    return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+  const formatRoleName = (name) => {
+    // Split by spaces, underscores, or hyphens
+    return name
+      .split(/[\s_-]/)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
   };
 
   if (loading) {
@@ -339,8 +253,6 @@ function UserManagement() {
               onChange={(e) => setSortBy(e.target.value)}
               className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
-              <option value={SORT_OPTIONS.ROLE_DESC}>Security Level (High to Low)</option>
-              <option value={SORT_OPTIONS.ROLE_ASC}>Security Level (Low to High)</option>
               <option value={SORT_OPTIONS.ALPHA_ASC}>Name (A to Z)</option>
               <option value={SORT_OPTIONS.ALPHA_DESC}>Name (Z to A)</option>
             </select>
@@ -380,9 +292,9 @@ function UserManagement() {
                     {user.roles?.map((role) => (
                       <span
                         key={role.name}
-                        className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${getRoleColor(role.security_level)}`}
+                        className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
                       >
-                        {role.name}
+                        {formatRoleName(role.name)}
                       </span>
                     ))}
                   </div>
@@ -420,12 +332,12 @@ function UserManagement() {
                 <label key={role.role_id} className="flex items-center space-x-3 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md">
                   <input
                     type="checkbox"
-                    checked={userRoles.some(r => r.name === role.name)}
+                    checked={userRoles.some(r => r.role_id === role.role_id)}
                     onChange={() => handleRoleToggle(role)}
                     className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                   />
                   <span className="text-gray-700 dark:text-gray-300">
-                    {role.name} (Level {role.security_level})
+                    {formatRoleName(role.name)}
                   </span>
                 </label>
               ))}

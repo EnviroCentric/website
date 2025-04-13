@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import useToken from "@galvanize-inc/jwtdown-for-react";
+import { useAuth } from '../contexts/AuthContext';
 
 const ProfileUpdate = () => {
   const navigate = useNavigate();
-  const { token } = useToken();
+  const { token, logout } = useAuth();
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
@@ -21,7 +21,6 @@ const ProfileUpdate = () => {
     const fetchUserData = async () => {
       try {
         const response = await fetch(`${import.meta.env.VITE_API_URL}/users/self`, {
-          credentials: 'include',
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -113,57 +112,55 @@ const ProfileUpdate = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
     if (!validateForm()) {
       return;
     }
 
-    setIsLoading(true);
+    // Show confirmation dialog before proceeding
+    const confirmUpdate = window.confirm(
+      "After updating your profile, you will be logged out and need to log in again. Do you want to continue?"
+    );
+
+    if (!confirmUpdate) {
+      return;
+    }
+
     try {
-      // Only include fields that have values
-      const updateData = {
-        email: formData.email.trim() || undefined,
-        first_name: formData.first_name.trim() || undefined,
-        last_name: formData.last_name.trim() || undefined,
-      };
-
-      // Only include password fields if a new password is being set
-      if (formData.new_password) {
-        updateData.current_password = formData.current_password;
-        updateData.new_password = formData.new_password;
-        updateData.new_password_confirmation = formData.new_password_confirmation;
-      }
-
+      setIsLoading(true);
       const response = await fetch(`${import.meta.env.VITE_API_URL}/users/self`, {
         method: 'PUT',
-        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(updateData),
+        body: JSON.stringify(formData),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to update profile');
+        throw new Error(errorData.message || 'Failed to update profile');
       }
 
-      const updatedUser = await response.json();
-      setFormData(prev => ({
-        ...prev,
-        first_name: updatedUser.first_name || '',
-        last_name: updatedUser.last_name || '',
-        email: updatedUser.email || '',
-        current_password: '',
-        new_password: '',
-        new_password_confirmation: '',
-      }));
+      // First, clear the token from localStorage
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('tokenTimestamp');
 
-      setSuccessMessage('Profile updated successfully!');
-    } catch (error) {
-      setErrors({ submit: error.message });
-    } finally {
+      // Then make the logout API call
+      await fetch(`${import.meta.env.VITE_API_URL}/token`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      // Finally, clear the token from the auth context
+      logout();
+
+      // Force a page reload to ensure all components reset their state
+      window.location.href = '/?showLogin=true&message=Profile updated successfully. Please log in again to continue.';
+    } catch (err) {
+      setErrors({ submit: err.message });
       setIsLoading(false);
     }
   };

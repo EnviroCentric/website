@@ -1,7 +1,7 @@
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import useToken from "@galvanize-inc/jwtdown-for-react";
-import { useEffect, useState, useRef } from 'react';
-import { getCachedToken } from './Auth';
+import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import Modal from './Modal';
 import LoginForm from './LoginForm';
 import RegisterForm from './RegisterForm';
@@ -20,9 +20,8 @@ const userMenuOptions = [
 ];
 
 function Navbar() {
-  const { token, logout } = useToken();
-  const [username, setUsername] = useState("");
-  const [userSecurityLevel, setUserSecurityLevel] = useState(0);
+  const { user, logout } = useAuth();
+  const { isDarkMode, toggleTheme } = useTheme();
   const [changed, setChanged] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -32,10 +31,6 @@ function Navbar() {
   const [loginSuccessMessage, setLoginSuccessMessage] = useState("");
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const userMenuRef = useRef(null);
-
-  const updateUser = () => {
-    getUser();
-  };
 
   const onNav = () => {
     for (let nav of navigation) {
@@ -48,80 +43,14 @@ function Navbar() {
     setChanged(!changed);
   };
 
-  async function getUser() {
-    const cachedToken = getCachedToken();
-    const tokenToUse = cachedToken || token;
-    
-    if (!tokenToUse) return;
-
-    const apiUrl = import.meta.env.VITE_API_URL;
-    if (!apiUrl) {
-      console.error("API URL not configured. Please set VITE_API_URL environment variable.");
-      return;
-    }
-
-    const config = {
-      method: "GET",
-      credentials: "include",
-      headers: {
-        Authorization: `Bearer ${tokenToUse}`,
-        "Content-Type": "application/json",
-      },
-    };
-    try {
-      const response = await fetch(
-        `${apiUrl}/users/self`,
-        config
-      );
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const data = await response.json();
-      setUsername(data.email);
-      
-      // Get the user's maximum security level from their roles
-      const maxLevel = Math.max(...data.roles.map(role => role.security_level), 0);
-      setUserSecurityLevel(maxLevel);
-    } catch (error) {
-      console.error("Error fetching user data:", error);
-      if (error.message.includes("401")) {
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('tokenTimestamp');
-        setUsername("");
-        setUserSecurityLevel(0);
-      }
-    }
-  }
-
-  const handleLogout = async () => {
-    try {
-      // First clear local storage
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('tokenTimestamp');
-      
-      // Then call logout to clear context
-      await logout();
-      
-      // Reset all UI state
-      setUsername("");
-      setUserSecurityLevel(0);
-      setIsUserMenuOpen(false);
-      setIsMobileMenuOpen(false);
-      setShowLoginModal(false);
-      setShowRegisterModal(false);
-      setLoginSuccessMessage("");
-      
-      // Force a re-render of the auth context
-      window.location.reload();
-      
-      // Redirect to home page if on a protected route
-      const protectedRoutes = ['/profile', '/profile/update', '/manage-users'];
-      if (protectedRoutes.includes(location.pathname)) {
-        navigate('/');
-      }
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
+  const handleLogout = () => {
+    logout();
+    setIsUserMenuOpen(false);
+    setIsMobileMenuOpen(false);
+    setShowLoginModal(false);
+    setShowRegisterModal(false);
+    setLoginSuccessMessage("");
+    navigate('/');
   };
 
   const switchToRegister = () => {
@@ -138,22 +67,7 @@ function Navbar() {
 
   useEffect(() => {
     onNav();
-    getUser();
   }, [location.pathname]);
-  
-  // Add a new useEffect to update when token changes
-  useEffect(() => {
-    if (token) {
-      getUser();
-    } else {
-      setUsername("");
-      setUserSecurityLevel(0);
-      setIsUserMenuOpen(false);
-      setIsMobileMenuOpen(false);
-      setShowLoginModal(false);
-      setShowRegisterModal(false);
-    }
-  }, [token]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -205,7 +119,21 @@ function Navbar() {
 
             {/* Desktop Actions */}
             <div className="hidden md:flex items-center space-x-4">
-              {username ? (
+              <button
+                onClick={toggleTheme}
+                className="p-2 rounded-md text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white focus:outline-none"
+              >
+                {isDarkMode ? (
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                  </svg>
+                ) : (
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                  </svg>
+                )}
+              </button>
+              {user ? (
                 <div className="relative" ref={userMenuRef}>
                   <button
                     onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
@@ -214,7 +142,7 @@ function Navbar() {
                     <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
-                    <span>{username}</span>
+                    <span>{user.first_name}</span>
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
@@ -225,7 +153,7 @@ function Navbar() {
                       <div className="py-1" role="menu">
                         {userMenuOptions.map((option) => {
                           // Skip options that require higher security level
-                          if (option.securityLevel && userSecurityLevel < option.securityLevel) {
+                          if (option.securityLevel && !user.roles?.some(role => role.name === 'admin')) {
                             return null;
                           }
                           
@@ -307,7 +235,7 @@ function Navbar() {
                 {item.name}
               </Link>
             ))}
-            {username && userSecurityLevel >= 10 && (
+            {user && user.roles?.some(role => role.name === 'admin') && (
               <Link
                 to="/manage-users"
                 className="text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white block px-3 py-2 rounded-md text-base font-medium"
@@ -315,7 +243,7 @@ function Navbar() {
                 Manage Users
               </Link>
             )}
-            {username ? (
+            {user ? (
               <button
                 onClick={handleLogout}
                 className="w-full text-left text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white block px-3 py-2 rounded-md text-base font-medium"
@@ -341,7 +269,7 @@ function Navbar() {
         <LoginForm 
           onClose={() => setShowLoginModal(false)}
           onSwitchToRegister={switchToRegister}
-          onLoginSuccess={updateUser}
+          onLoginSuccess={() => setShowLoginModal(false)}
           successMessage={loginSuccessMessage}
         />
       </Modal>

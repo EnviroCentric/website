@@ -1,20 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import useToken from "@galvanize-inc/jwtdown-for-react";
+import { useAuth } from '../contexts/AuthContext';
 
 export default function AccessManagement() {
-  const [pages, setPages] = useState([]);
   const [roles, setRoles] = useState([]);
-  const [selectedPages, setSelectedPages] = useState([]);
-  const [selectedRoles, setSelectedRoles] = useState([]);
-  const [pendingRoles, setPendingRoles] = useState([]);
-  const [pendingSecurityLevel, setPendingSecurityLevel] = useState(null);
+  const [permissions, setPermissions] = useState([]);
+  const [selectedRole, setSelectedRole] = useState(null);
+  const [selectedPermissions, setSelectedPermissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
-  const [pageSearch, setPageSearch] = useState('');
-  const [roleSearch, setRoleSearch] = useState('');
-  const { token } = useToken();
+  const [hasAccess, setHasAccess] = useState(false);
+  const [pendingChanges, setPendingChanges] = useState({});
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
+  const { token } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -23,141 +21,193 @@ export default function AccessManagement() {
       return;
     }
 
-    const fetchData = async () => {
+    const checkAccess = async () => {
       try {
-        const apiUrl = import.meta.env.VITE_API_URL;
-        const [pagesResponse, rolesResponse] = await Promise.all([
-          fetch(`${apiUrl}/pages`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }),
-          fetch(`${apiUrl}/roles`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }),
-        ]);
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/users/self`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
 
-        if (!pagesResponse.ok || !rolesResponse.ok) {
-          throw new Error('Failed to fetch data');
+        if (!response.ok) {
+          throw new Error('Failed to verify access');
         }
 
-        const [pagesData, rolesData] = await Promise.all([
-          pagesResponse.json(),
-          rolesResponse.json(),
-        ]);
+        const userData = await response.json();
+        const userRoles = userData.roles || [];
+        
+        // Check if user has admin role
+        const isAdmin = userRoles.some(role => role.name.toLowerCase() === 'admin');
+        setHasAccess(isAdmin);
 
-        setPages(pagesData);
-        setRoles(rolesData);
-        setLoading(false);
-      } catch (err) {
-        setError(err.message);
+        if (isAdmin) {
+          await fetchData();
+        } else {
+          navigate('/');
+        }
+      } catch (_) {
+        setError('Failed to verify access permissions');
+        setHasAccess(false);
+        navigate('/');
+      } finally {
         setLoading(false);
       }
     };
 
-    fetchData();
+    checkAccess();
   }, [token, navigate]);
 
-  const handlePageSelect = async (pageId) => {
-    const newSelectedPages = selectedPages.includes(pageId)
-      ? selectedPages.filter(id => id !== pageId)
-      : [...selectedPages, pageId];
-
-    setSelectedPages(newSelectedPages);
-
-    if (newSelectedPages.length === 0) {
-      setSelectedRoles([]);
-      setPendingRoles([]);
-      setPendingSecurityLevel(null);
-      return;
-    }
-
+  const fetchData = async () => {
     try {
       const apiUrl = import.meta.env.VITE_API_URL;
-      const responses = await Promise.all(
-        newSelectedPages.map(pageId =>
-          fetch(`${apiUrl}/pages/${pageId}/roles`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          })
-        )
-      );
+      const [rolesResponse, permissionsResponse] = await Promise.all([
+        fetch(`${apiUrl}/roles`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }),
+        fetch(`${apiUrl}/roles/permissions`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }),
+      ]);
 
-      const data = await Promise.all(responses.map(r => r.json()));
-      
-      const commonRoles = data.reduce((acc, pageData) => {
-        if (acc.length === 0) return pageData.roles;
-        return acc.filter(roleId => pageData.roles.includes(roleId));
-      }, []);
+      if (!rolesResponse.ok || !permissionsResponse.ok) {
+        throw new Error('Failed to fetch data');
+      }
 
-      // Find the highest minimum security level among selected pages
-      const maxSecurityLevel = data.reduce((max, pageData) => {
-        return Math.max(max, pageData.min_security_level || 0);
-      }, 0);
+      const [rolesData, permissionsData] = await Promise.all([
+        rolesResponse.json(),
+        permissionsResponse.json(),
+      ]);
 
-      setSelectedRoles(commonRoles);
-      setPendingRoles(commonRoles);
-      setPendingSecurityLevel(maxSecurityLevel);
+      if (!Array.isArray(rolesData) || !Array.isArray(permissionsData)) {
+        throw new Error('Invalid data structure received from server');
+      }
+
+      // Filter out the admin role
+      const filteredRoles = rolesData.filter(role => role.name.toLowerCase() !== 'admin');
+      setRoles(filteredRoles);
+      setPermissions(permissionsData);
     } catch (err) {
       setError(err.message);
     }
   };
 
-  const handleRoleToggle = (roleId) => {
-    const newPendingRoles = pendingRoles.includes(roleId)
-      ? pendingRoles.filter(id => id !== roleId)
-      : [...pendingRoles, roleId];
+  const handleRoleSelect = async (role) => {
+    setSelectedRole(role);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/roles/${role.role_id}/permissions`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-    setPendingRoles(newPendingRoles);
+      if (!response.ok) {
+        throw new Error('Failed to fetch role permissions');
+      }
+
+      const data = await response.json();
+      setSelectedPermissions(data.permissions || []);
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
-  const handleSecurityLevelChange = (level) => {
-    setPendingSecurityLevel(level);
+  const handlePermissionToggle = (permission) => {
+    if (!selectedRole) return;
+
+    const isAdding = !selectedPermissions.includes(permission);
+    const newPermissions = isAdding
+      ? [...selectedPermissions, permission]
+      : selectedPermissions.filter(p => p !== permission);
+
+    setSelectedPermissions(newPermissions);
+    
+    // Store the change in pendingChanges
+    setPendingChanges(prev => {
+      const roleId = selectedRole.role_id;
+      const currentChanges = prev[roleId] || { added: [], removed: [] };
+      
+      if (isAdding) {
+        // If we're adding a permission, remove it from removed if it was there
+        const newRemoved = currentChanges.removed.filter(p => p !== permission);
+        // Add it to added if it's not already there
+        const newAdded = currentChanges.added.includes(permission) 
+          ? currentChanges.added 
+          : [...currentChanges.added, permission];
+        
+        return {
+          ...prev,
+          [roleId]: { added: newAdded, removed: newRemoved }
+        };
+      } else {
+        // If we're removing a permission, remove it from added if it was there
+        const newAdded = currentChanges.added.filter(p => p !== permission);
+        // Add it to removed if it's not already there
+        const newRemoved = currentChanges.removed.includes(permission)
+          ? currentChanges.removed
+          : [...currentChanges.removed, permission];
+        
+        return {
+          ...prev,
+          [roleId]: { added: newAdded, removed: newRemoved }
+        };
+      }
+    });
   };
 
   const handleSubmit = async () => {
-    if (selectedPages.length === 0) {
-      setError('Please select at least one page');
-      return;
-    }
-
     try {
-      const apiUrl = import.meta.env.VITE_API_URL;
-      await Promise.all(
-        selectedPages.map(pageId =>
-          fetch(`${apiUrl}/pages/${pageId}/roles`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ 
-              role_ids: pendingRoles,
-              min_security_level: pendingSecurityLevel 
-            }),
-          })
-        )
-      );
+      // Submit all pending changes
+      for (const [roleId, changes] of Object.entries(pendingChanges)) {
+        // Get current permissions for the role
+        const currentPermissions = selectedRole?.role_id === parseInt(roleId) 
+          ? selectedPermissions 
+          : [];
+        
+        // Calculate final permissions by applying changes
+        const finalPermissions = [
+          ...currentPermissions.filter(p => !changes.removed.includes(p)),
+          ...changes.added
+        ];
 
-      setSelectedRoles(pendingRoles);
-      setSuccess('Access permissions updated successfully');
-      setError(null);
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/roles/${roleId}/permissions`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ permissions: finalPermissions }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to update permissions for role ${roleId}`);
+        }
+      }
+
+      // Clear pending changes and refresh data
+      setPendingChanges({});
+      await fetchData();
+      setShowConfirmationModal(false);
     } catch (err) {
       setError(err.message);
-      setSuccess(null);
     }
   };
 
-  const filteredPages = pages.filter(page =>
-    page.name.toLowerCase().includes(pageSearch.toLowerCase())
-  );
+  const formatRoleName = (name) => {
+    return name
+      .split(/[\s_-]/)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  };
 
-  const filteredRoles = roles.filter(role =>
-    role.name.toLowerCase().includes(roleSearch.toLowerCase())
-  );
+  const formatPermissionName = (name) => {
+    return name.split('_').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ');
+  };
 
   if (loading) {
     return (
@@ -167,113 +217,181 @@ export default function AccessManagement() {
     );
   }
 
+  if (!hasAccess) {
+    return null;
+  }
+
+  if (error) {
+    return (
+      <div className="flex justify-center items-center h-full">
+        <div className="text-red-500">{error}</div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto p-6">
       <h1 className="text-3xl font-bold mb-8 text-gray-900 dark:text-white">Access Management</h1>
       
-      {error && (
-        <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
-          {error}
-        </div>
-      )}
-      
-      {success && (
-        <div className="mb-4 p-4 bg-green-100 border border-green-400 text-green-700 rounded">
-          {success}
-        </div>
-      )}
-      
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Roles List */}
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
-          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Pages</h2>
-          <div className="mb-4">
-            <input
-              type="text"
-              placeholder="Search pages..."
-              value={pageSearch}
-              onChange={(e) => setPageSearch(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-            />
-          </div>
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {filteredPages.map((page) => (
-              <label
-                key={page.page_id}
-                className="flex items-center space-x-3 p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedPages.includes(page.page_id)}
-                  onChange={() => handlePageSelect(page.page_id)}
-                  className="form-checkbox h-5 w-5 text-green-600 dark:text-green-400"
-                />
-                <span className="text-gray-900 dark:text-white">{page.name}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
-          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Access</h2>
-          <div className="mb-4">
-            <input
-              type="text"
-              placeholder="Search roles..."
-              value={roleSearch}
-              onChange={(e) => setRoleSearch(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-            />
-          </div>
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {filteredRoles.map((role) => (
-              <label
+          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Roles</h2>
+          <div className="space-y-2">
+            {roles.map((role) => (
+              <button
                 key={role.role_id}
-                className="flex items-center space-x-3 p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                onClick={() => handleRoleSelect(role)}
+                className={`w-full text-left px-4 py-2 rounded ${
+                  selectedRole?.role_id === role.role_id
+                    ? 'bg-green-100 dark:bg-green-900 text-green-900 dark:text-green-100'
+                    : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-900 dark:text-white'
+                }`}
               >
-                <input
-                  type="checkbox"
-                  checked={pendingRoles.includes(role.role_id)}
-                  onChange={() => handleRoleToggle(role.role_id)}
-                  className="form-checkbox h-5 w-5 text-green-600 dark:text-green-400"
-                  disabled={selectedPages.length === 0}
-                />
-                <span className="text-gray-900 dark:text-white">{role.name}</span>
-              </label>
+                {formatRoleName(role.name)}
+              </button>
             ))}
           </div>
-          
-          <div className="mt-6">
-            <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Minimum Security Level</h3>
-            <div className="flex items-center space-x-4">
-              <input
-                type="range"
-                min="0"
-                max="10"
-                value={pendingSecurityLevel || 0}
-                onChange={(e) => handleSecurityLevelChange(parseInt(e.target.value))}
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
-                disabled={selectedPages.length === 0}
-              />
-              <span className="text-gray-900 dark:text-white min-w-[2rem] text-center">
-                {pendingSecurityLevel || 0}
-              </span>
-            </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-              Users must have at least this security level to access the selected pages
-            </p>
+        </div>
+
+        {/* Permissions List */}
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+            {selectedRole ? `Permissions for ${formatRoleName(selectedRole.name)}` : 'Select a Role'}
+          </h2>
+          <div className="space-y-2">
+            {selectedRole ? (
+              permissions.map((permission) => (
+                <label
+                  key={permission}
+                  className="flex items-center space-x-3 p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedPermissions.includes(permission)}
+                    onChange={() => handlePermissionToggle(permission)}
+                    className="form-checkbox h-5 w-5 text-green-600 dark:text-green-400"
+                  />
+                  <span className="text-gray-900 dark:text-white">
+                    {formatPermissionName(permission)}
+                  </span>
+                </label>
+              ))
+            ) : (
+              <p className="text-gray-500 dark:text-gray-400">
+                Select a role to view and manage its permissions
+              </p>
+            )}
           </div>
         </div>
       </div>
 
-      <div className="mt-6 flex justify-end">
-        <button
-          onClick={handleSubmit}
-          disabled={selectedPages.length === 0}
-          className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Apply Changes
-        </button>
-      </div>
+      {/* Submit Button */}
+      {Object.keys(pendingChanges).length > 0 && (
+        <div className="mt-8 flex justify-end">
+          <button
+            onClick={() => setShowConfirmationModal(true)}
+            className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
+          >
+            Submit Changes
+          </button>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {showConfirmationModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Confirm Changes</h2>
+              <p className="mt-2 text-gray-700 dark:text-gray-300">The following changes will be applied:</p>
+            </div>
+
+            {/* Modal Body - Scrollable */}
+            <div className="p-6 max-h-[60vh] overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {Object.entries(pendingChanges).map(([roleId, changes]) => {
+                  const role = roles.find(r => r.role_id === parseInt(roleId));
+                  if (!role) return null;
+                  
+                  return (
+                    <div key={roleId} className="bg-gray-100 dark:bg-gray-700 p-4 rounded">
+                      <h3 className="font-semibold text-gray-900 dark:text-white mb-3 pb-2 border-b border-gray-200 dark:border-gray-600">
+                        {formatRoleName(role.name)}
+                      </h3>
+
+                      <div className="space-y-3">
+                        {/* Adding Permissions Section */}
+                        {changes.added.length > 0 && (
+                          <div>
+                            <h4 className="text-sm font-medium text-green-600 dark:text-green-400 mb-2 flex items-center">
+                              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                              </svg>
+                              Adding:
+                            </h4>
+                            <ul className="space-y-1">
+                              {changes.added.map(permission => (
+                                <li 
+                                  key={`add-${permission}`} 
+                                  className="text-green-600 dark:text-green-400 text-sm flex items-center"
+                                >
+                                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                                  {formatPermissionName(permission)}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Removing Permissions Section */}
+                        {changes.removed.length > 0 && (
+                          <div>
+                            <h4 className="text-sm font-medium text-red-600 dark:text-red-400 mb-2 flex items-center">
+                              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                              </svg>
+                              Removing:
+                            </h4>
+                            <ul className="space-y-1">
+                              {changes.removed.map(permission => (
+                                <li 
+                                  key={`remove-${permission}`} 
+                                  className="text-red-600 dark:text-red-400 text-sm flex items-center"
+                                >
+                                  <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
+                                  {formatPermissionName(permission)}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-4">
+              <button
+                onClick={() => setShowConfirmationModal(false)}
+                className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg transition-colors duration-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmit}
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors duration-200"
+              >
+                Confirm Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 } 

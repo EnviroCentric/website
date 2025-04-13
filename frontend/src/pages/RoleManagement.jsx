@@ -4,19 +4,15 @@ import { getCachedToken } from '../components/Auth';
 import DraggableModal from '../components/DraggableModal';
 
 const SORT_OPTIONS = {
-  LEVEL_DESC: 'level_desc',
-  LEVEL_ASC: 'level_asc',
   ALPHA_ASC: 'alpha_asc',
   ALPHA_DESC: 'alpha_desc',
-  NEWEST: 'newest',
-  OLDEST: 'oldest',
 };
 
 function RoleManagement() {
   const [roles, setRoles] = useState([]);
   const [filteredRoles, setFilteredRoles] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState(SORT_OPTIONS.LEVEL_DESC);
+  const [sortBy, setSortBy] = useState(SORT_OPTIONS.ALPHA_ASC);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -24,7 +20,6 @@ function RoleManagement() {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    security_level: 1,
   });
   const navigate = useNavigate();
 
@@ -37,25 +32,16 @@ function RoleManagement() {
     const query = searchQuery.toLowerCase();
     let filtered = roles.filter(role => 
       role.name.toLowerCase().includes(query) ||
-      (role.description && role.description.toLowerCase().includes(query)) ||
-      role.security_level.toString().includes(query)
+      (role.description && role.description.toLowerCase().includes(query))
     );
 
     // Apply sorting
     filtered = [...filtered].sort((a, b) => {
       switch (sortBy) {
-        case SORT_OPTIONS.LEVEL_DESC:
-          return b.security_level - a.security_level;
-        case SORT_OPTIONS.LEVEL_ASC:
-          return a.security_level - b.security_level;
         case SORT_OPTIONS.ALPHA_ASC:
           return a.name.localeCompare(b.name);
         case SORT_OPTIONS.ALPHA_DESC:
           return b.name.localeCompare(a.name);
-        case SORT_OPTIONS.NEWEST:
-          return new Date(b.created_at) - new Date(a.created_at);
-        case SORT_OPTIONS.OLDEST:
-          return new Date(a.created_at) - new Date(b.created_at);
         default:
           return 0;
       }
@@ -188,10 +174,32 @@ function RoleManagement() {
     }
   };
 
+  const formatRoleName = (name) => {
+    // Split by spaces, underscores, or hyphens
+    return name
+      .split(/[\s_-]/)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  };
+
   const handleEditRole = (role) => {
     setSelectedRole(role);
+    setFormData({
+      name: role.name,
+      description: role.description || '',
+    });
     setIsModalOpen(true);
   };
+
+  // Reset form data when modal is closed
+  useEffect(() => {
+    if (!isModalOpen) {
+      setFormData({
+        name: '',
+        description: '',
+      });
+    }
+  }, [isModalOpen]);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -203,7 +211,7 @@ function RoleManagement() {
           <div className="flex-grow relative">
             <input
               type="text"
-              placeholder="Search by name, description, or security level..."
+              placeholder="Search by name or description..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2 rounded-lg bg-gray-700 border-none text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -219,8 +227,6 @@ function RoleManagement() {
             onChange={(e) => setSortBy(e.target.value)}
             className="min-w-[200px] py-2 px-3 rounded-lg bg-gray-700 text-white border-none focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value={SORT_OPTIONS.LEVEL_DESC}>Security Level (High to Low)</option>
-            <option value={SORT_OPTIONS.LEVEL_ASC}>Security Level (Low to High)</option>
             <option value={SORT_OPTIONS.ALPHA_ASC}>Name (A to Z)</option>
             <option value={SORT_OPTIONS.ALPHA_DESC}>Name (Z to A)</option>
           </select>
@@ -253,39 +259,57 @@ function RoleManagement() {
           </div>
         )}
 
-        <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
-          <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-            {filteredRoles.map((role) => (
-              <li key={role.role_id} className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{role.name}</h3>
-                    <p className="mt-1 text-gray-600 dark:text-gray-300">{role.description}</p>
-                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Security Level: {role.security_level}</p>
-                  </div>
-                  <div className="flex space-x-3">
-                    <button
-                      onClick={() => handleEditRole(role)}
-                      className="bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-medium py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-gray-500 dark:focus:ring-gray-400"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDeleteRole(role.role_id, role.name)}
-                      className="bg-red-500 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700 text-white font-medium py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-red-500 dark:focus:ring-red-400"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              </li>
-            ))}
-            {filteredRoles.length === 0 && (
-              <li className="p-6 text-center text-gray-500 dark:text-gray-400">
-                {searchQuery ? 'No roles found matching your search' : 'No roles found'}
-              </li>
-            )}
-          </ul>
+        <div className="overflow-x-auto">
+          <table className="min-w-full bg-white dark:bg-gray-800 rounded-lg overflow-hidden">
+            <thead className="bg-gray-50 dark:bg-gray-700">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  Role Name
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  Description
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+              {filteredRoles.map((role) => (
+                <tr key={role.role_id}>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                    {formatRoleName(role.name)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    {role.description}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => handleEditRole(role)}
+                        className="bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800 px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteRole(role.role_id, role.name)}
+                        className="bg-red-100 dark:bg-red-900 text-red-600 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800 px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filteredRoles.length === 0 && (
+                <tr>
+                  <td colSpan="3" className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">
+                    {searchQuery ? 'No roles found matching your search' : 'No roles found'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -327,39 +351,12 @@ function RoleManagement() {
                 rows="3"
               />
             </div>
-            <div className="mb-6">
-              <label className="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2">
-                Security Level
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="10"
-                value={formData.security_level}
-                onChange={(e) => {
-                  let value = parseInt(e.target.value) || 1;
-                  if (value > 10) value = 10;
-                  if (value < 1) value = 1;
-                  setFormData({ ...formData, security_level: value });
-                }}
-                onBlur={(e) => {
-                  let value = parseInt(e.target.value) || 1;
-                  if (value > 10) value = 10;
-                  if (value < 1) value = 1;
-                  e.target.value = value;
-                  setFormData({ ...formData, security_level: value });
-                }}
-                onFocus={(e) => e.target.select()}
-                className="shadow appearance-none border dark:border-gray-600 rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 dark:bg-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
-                required
-              />
-            </div>
-            <div className="flex justify-end">
+            <div className="flex justify-center mt-6">
               <button
                 type="submit"
-                className="bg-blue-500 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400"
+                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors duration-200"
               >
-                {selectedRole ? 'Save Changes' : 'Create Role'}
+                Save Changes
               </button>
             </div>
           </form>

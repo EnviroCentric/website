@@ -30,8 +30,10 @@ class UserIn(UserBase):
 class UserOut(UserBase):
     user_id: int
     last_login: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
-    @validator("last_login")
+    @validator("last_login", "created_at", "updated_at")
     def parse_datetime(cls, v):
         if isinstance(v, str):
             try:

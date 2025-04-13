@@ -1,2 +1,1 @@
-DELETE FROM roles
-WHERE role_id = %s; 
+DELETE FROM roles WHERE role_id = %s; 

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import useToken from "@galvanize-inc/jwtdown-for-react";
+import { useAuth } from '../contexts/AuthContext';
 
 // Define RoleItem component outside of the Profile component
 const RoleItem = ({ role }) => (
@@ -18,7 +18,7 @@ const RoleItem = ({ role }) => (
 );
 
 const Profile = () => {
-  const { token } = useToken();
+  const { token } = useAuth();
   const navigate = useNavigate();
   const [userData, setUserData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -29,7 +29,6 @@ const Profile = () => {
       try {
         setIsLoading(true);
         const response = await fetch(`${import.meta.env.VITE_API_URL}/users/self`, {
-          credentials: 'include',
           headers: {
             Authorization: `Bearer ${token}`,
           },

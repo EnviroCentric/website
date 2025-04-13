@@ -11,7 +11,11 @@ from models.users import (
     UserOutWithPassword,
     Error,
 )
+from models.roles import UserWithRoles, RoleOut
 from sql.loader import load_sql_template
+from repositories.roles import RolesRepository
+from repositories.permissions import PermissionsRepository
+from fastapi import HTTPException, status
 
 
 def parse_datetime(date_str: str) -> Optional[str]:
@@ -39,12 +43,15 @@ def parse_datetime(date_str: str) -> Optional[str]:
 
 class UsersRepository:
     def record_to_user_out(self, record) -> UserOut:
+        # SQL columns: user_id, email, first_name, last_name, created_at, updated_at, last_login
         return UserOut(
             user_id=record[0],
             email=record[1],
             first_name=record[2],
             last_name=record[3],
-            last_login=parse_datetime(record[4]),
+            created_at=record[4],  # created_at from DB
+            updated_at=record[5],  # updated_at from DB
+            last_login=record[6],  # last_login from DB
         )
 
     def get_user(self, email: str) -> Optional[UserOutWithPassword]:
@@ -90,15 +97,71 @@ class UsersRepository:
             print(e)
             return None
 
-    def get_all_users(self) -> Union[List[UserOut], Error]:
+    def get_all_users(self) -> List[UserWithRoles]:
         try:
             with DatabaseConnection.get_db() as db:
                 sql = load_sql_template("users/get_all_users.sql")
                 result = db.execute(sql)
-                return [self.record_to_user_out(record) for record in result]
+                users = [self.record_to_user_out(record) for record in result]
+
+                # Get roles with permissions for each user
+                roles_repo = RolesRepository()
+                permissions_repo = PermissionsRepository()
+                users_with_roles = []
+                for user in users:
+                    roles = roles_repo.get_user_roles(user.user_id)
+                    # Ensure each role has its permissions
+                    for role in roles:
+                        role.permissions = permissions_repo.get_role_permissions(
+                            role.role_id
+                        )
+                    # Format timestamps as strings if they exist
+                    last_login_str = None
+                    created_at_str = None
+                    updated_at_str = None
+
+                    if user.last_login:
+                        if isinstance(user.last_login, str):
+                            last_login_str = user.last_login
+                        else:
+                            last_login_str = user.last_login.strftime(
+                                "%Y-%m-%d %H:%M:%S"
+                            )
+
+                    if user.created_at:
+                        if isinstance(user.created_at, str):
+                            created_at_str = user.created_at
+                        else:
+                            created_at_str = user.created_at.strftime(
+                                "%Y-%m-%d %H:%M:%S"
+                            )
+
+                    if user.updated_at:
+                        if isinstance(user.updated_at, str):
+                            updated_at_str = user.updated_at
+                        else:
+                            updated_at_str = user.updated_at.strftime(
+                                "%Y-%m-%d %H:%M:%S"
+                            )
+
+                    user_with_roles = UserWithRoles(
+                        user_id=user.user_id,
+                        email=user.email,
+                        first_name=user.first_name,
+                        last_name=user.last_name,
+                        last_login=last_login_str,
+                        roles=roles,
+                        created_at=created_at_str,
+                        updated_at=updated_at_str,
+                    )
+                    users_with_roles.append(user_with_roles)
+                return users_with_roles
         except Exception as e:
             print(e)
-            return {"message": "Could not get users"}
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Could not get users",
+            )
 
     def create_user(self, info: UserIn, hashed_password: str) -> UserOut:
         try:
@@ -113,7 +176,16 @@ class UsersRepository:
                     ],
                 )
                 record = result.fetchone()
-                return self.record_to_user_out(record)
+                user = self.record_to_user_out(record)
+
+                # Assign default role to the new user
+                default_role_name = "user"  # Assuming 'user' is the default role
+                roles_repo = RolesRepository()
+                default_role = roles_repo.get_role(default_role_name)
+                if default_role:
+                    roles_repo.assign_role(user.user_id, default_role.role_id)
+
+                return user
         except Exception as e:
             print(e)
             raise DuplicateUserError from e
@@ -156,6 +228,7 @@ class UsersRepository:
                     created_at=parse_datetime(record[4]),
                     updated_at=parse_datetime(record[5]),
                     last_login=parse_datetime(record[6]),
+                    message="Profile updated successfully. Please log in again to continue.",
                 )
         except Exception as e:
             print(e)
@@ -181,7 +254,7 @@ class UsersRepository:
                     return self.record_to_user_out(record)
                 return None
         except Exception as e:
-            print(e)
+            print(f"Error getting user by ID: {e}")
             return None
 
     def create_admin_user(self, info: UserIn, hashed_password: str) -> UserOut:
