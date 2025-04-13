@@ -5,35 +5,64 @@ const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-  const checkAuth = async () => {
-    if (!token) {
-      setLoading(false);
-      return;
-    }
+  const getAuthHeader = () => {
+    const token = localStorage.getItem('access_token');
+    return token ? { 'Authorization': `Bearer ${token}` } : {};
+  };
 
+  const checkAuth = async () => {
     try {
       const response = await fetch(`${API_URL}/api/users/self`, {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          ...getAuthHeader(),
+          'Content-Type': 'application/json',
         },
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch user data');
+      if (response.status === 401) {
+        // Try to refresh the token
+        const refreshToken = localStorage.getItem('refresh_token');
+        if (refreshToken) {
+          const refreshResponse = await fetch(`${API_URL}/api/auth/refresh`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${refreshToken}`,
+              'Content-Type': 'application/json',
+            },
+          });
+
+          if (refreshResponse.ok) {
+            const { access_token, refresh_token } = await refreshResponse.json();
+            localStorage.setItem('access_token', access_token);
+            localStorage.setItem('refresh_token', refresh_token);
+            // Retry the original request
+            return checkAuth();
+          }
+        }
+        // If refresh fails or no refresh token, clear everything
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        setUser(null);
+        setLoading(false);
+        return;
       }
 
-      const data = await response.json();
-      setUser(data);
+      if (!response.ok) {
+        console.error('Unexpected auth check error:', response.status);
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
+      const userData = await response.json();
+      setUser(userData);
     } catch (error) {
       console.error('Auth check failed:', error);
-      localStorage.removeItem('token');
-      setToken(null);
       setUser(null);
     } finally {
       setLoading(false);
@@ -42,48 +71,40 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     checkAuth();
-  }, [token]);
+  }, []);
 
   const login = async (email, password) => {
     try {
+      const formData = new FormData();
+      formData.append('username', email);
+      formData.append('password', password);
+
       const response = await fetch(`${API_URL}/api/auth/token`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'application/json',
         },
-        body: new URLSearchParams({
-          username: email,
-          password: password,
-        }),
+        body: formData,
       });
-
-      const text = await response.text();
-      let data;
-      
-      try {
-        data = JSON.parse(text);
-      } catch {
-        // Don't log the error if it's just invalid JSON from a failed login
-        throw new Error('Invalid response from server');
-      }
 
       if (!response.ok) {
         if (response.status === 401) {
           throw new Error('Invalid email or password');
-        } else if (response.status === 405) {
-          throw new Error('Login service temporarily unavailable');
         } else {
+          const data = await response.json();
           throw new Error(data.detail || 'Login failed');
         }
       }
 
-      localStorage.setItem('token', data.access_token);
-      setToken(data.access_token);
+      const { access_token, refresh_token } = await response.json();
+      localStorage.setItem('access_token', access_token);
+      localStorage.setItem('refresh_token', refresh_token);
 
-      // Fetch user data after successful login
+      // Get user data
       const userResponse = await fetch(`${API_URL}/api/users/self`, {
         headers: {
-          'Authorization': `Bearer ${data.access_token}`,
+          'Authorization': `Bearer ${access_token}`,
+          'Content-Type': 'application/json',
         },
       });
 
@@ -99,11 +120,19 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    setToken(null);
-    setUser(null);
-    navigate('/');
+  const logout = async () => {
+    try {
+      await fetch(`${API_URL}/api/auth/logout`, {
+        method: 'POST',
+        headers: getAuthHeader(),
+      });
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      setUser(null);
+      navigate('/');
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
   };
 
   const checkEmailExists = async (email) => {
@@ -129,7 +158,6 @@ export function AuthProvider({ children }) {
 
   const register = async (userData) => {
     try {
-      // Check if email exists first
       const emailExists = await checkEmailExists(userData.email);
       if (emailExists) {
         throw new Error('An account with this email already exists. Please use a different email or try logging in.');
@@ -147,8 +175,7 @@ export function AuthProvider({ children }) {
       try {
         const text = await response.text();
         data = JSON.parse(text);
-      } catch (_) {
-        // Don't log parse errors, just handle them
+      } catch {
         data = { detail: 'Invalid response from server' };
       }
 
@@ -159,10 +186,8 @@ export function AuthProvider({ children }) {
                   (response.status === 400 && 
                    (data.detail?.includes('already exists') || 
                     data.detail?.includes('duplicate key value')))) {
-          // Handle both explicit duplicate checks and database constraint violations
           throw new Error('An account with this email already exists. Please use a different email or try logging in.');
         } else if (response.status === 422) {
-          // Handle validation errors
           const errorDetails = data.detail || [];
           if (Array.isArray(errorDetails)) {
             const errorMessages = errorDetails.map(error => {
@@ -180,7 +205,6 @@ export function AuthProvider({ children }) {
 
       return { success: true };
     } catch (error) {
-      // Only log unexpected errors, not known error conditions
       if (!error.message.includes('already exists') && 
           !error.message.includes('Validation failed') &&
           !error.message.includes('duplicate key value')) {
@@ -192,12 +216,12 @@ export function AuthProvider({ children }) {
 
   const value = {
     user,
-    token,
     loading,
     login,
     logout,
     register,
     checkEmailExists,
+    getAuthHeader,
   };
 
   return (

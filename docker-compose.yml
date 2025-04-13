@@ -22,10 +22,21 @@ services:
     volumes:
       - ./backend:/app
     environment:
+      - PYTHONPATH=/app
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
       - DATABASE_URL=${DATABASE_URL}
-      - SIGNING_KEY=${SIGNING_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_REFRESH_SECRET_KEY=${JWT_REFRESH_SECRET_KEY}
+      - JWT_ALGORITHM=${JWT_ALGORITHM}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REFRESH_TOKEN_EXPIRE_MINUTES=${REFRESH_TOKEN_EXPIRE_MINUTES}
       - ADMIN_CREATION_SECRET=${ADMIN_CREATION_SECRET}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - BACKEND_PORT=${BACKEND_PORT}
+    command: >
+      uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       db:
         condition: service_healthy
