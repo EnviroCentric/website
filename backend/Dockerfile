@@ -20,6 +20,4 @@ RUN chmod +x /app/scripts/start.sh
 
 EXPOSE 8000
 
-ENV UVICORN_EXTRA_FLAGS="--reload"
-
 CMD ["sh", "/app/scripts/start.sh"] 
