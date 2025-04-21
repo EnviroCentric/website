@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import { useAuth } from '../contexts/AuthContext';
 
-function RegisterForm({ onClose, onSwitchToLogin }) {
+function RegisterForm({ onSwitchToLogin }) {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -37,9 +37,18 @@ function RegisterForm({ onClose, onSwitchToLogin }) {
   const handleEmailCheck = async (email) => {
     if (!email) return;
     
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setEmailError('Please enter a valid email address');
+      return;
+    }
+    
     try {
-      const exists = await checkEmailExists(email);
-      if (exists) {
+      const result = await checkEmailExists(email);
+      if (result.error) {
+        setEmailError(result.error);
+      } else if (result.exists) {
         setEmailError(
           <div>
             This email is already registered. 
@@ -54,8 +63,8 @@ function RegisterForm({ onClose, onSwitchToLogin }) {
       } else {
         setEmailError('');
       }
-    } catch (_) {
-      // Don't show error to user, just clear any existing error
+    } catch {
+      // Don't show errors to user, just clear any existing error
       setEmailError('');
     }
   };
@@ -267,7 +276,6 @@ function RegisterForm({ onClose, onSwitchToLogin }) {
 }
 
 RegisterForm.propTypes = {
-  onClose: PropTypes.func.isRequired,
   onSwitchToLogin: PropTypes.func.isRequired
 };
 

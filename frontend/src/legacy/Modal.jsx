@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
+import PropTypes from 'prop-types';
 
-export default function Modal({ isOpen, onClose, children }) {
+function Modal({ isOpen, onClose, children }) {
   useEffect(() => {
     const handleEscape = (e) => {
       if (e.key === 'Escape') {
@@ -48,4 +49,12 @@ export default function Modal({ isOpen, onClose, children }) {
       </div>
     </div>
   );
-} 
+}
+
+Modal.propTypes = {
+  isOpen: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  children: PropTypes.node.isRequired,
+};
+
+export default Modal; 

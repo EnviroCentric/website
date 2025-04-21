@@ -1,7 +1,8 @@
 from typing import List
 from pydantic_settings import BaseSettings
-from pydantic import AnyHttpUrl, validator
+from pydantic import AnyHttpUrl, field_validator, ConfigDict
 import os
+import json
 
 
 class Settings(BaseSettings):
@@ -34,19 +35,20 @@ class Settings(BaseSettings):
         return self.DATABASE_URL
 
     # CORS Configuration
-    ALLOWED_ORIGINS: List[AnyHttpUrl] = []
+    ALLOWED_ORIGINS: List[str] = []
 
-    @validator("ALLOWED_ORIGINS", pre=True)
-    def assemble_cors_origins(cls, v: str | List[str]) -> List[str] | str:
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
-        elif isinstance(v, (list, str)):
+    @field_validator("ALLOWED_ORIGINS", mode="before")
+    def assemble_cors_origins(cls, v: str | List[str]) -> List[str]:
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return [i.strip() for i in v.split(",")]
+        elif isinstance(v, list):
             return v
         raise ValueError(v)
 
-    class Config:
-        case_sensitive = True
-        env_file = ".env"
+    model_config = ConfigDict(case_sensitive=True, env_file=".env")
 
 
 settings = Settings()

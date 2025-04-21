@@ -43,7 +43,7 @@ async def test_register_weak_password(client, db):
         },
     )
     assert response.status_code == 422
-    assert "Password must be at least 12 characters long" in response.text
+    assert "String should have at least 12 characters" in response.text
 
 
 @pytest.mark.asyncio

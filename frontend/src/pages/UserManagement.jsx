@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import DraggableModal from '../components/DraggableModal';
+import DraggableModal from '../legacy/DraggableModal';
 
 const SORT_OPTIONS = {
   ALPHA_ASC: 'alpha_asc',

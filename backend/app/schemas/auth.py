@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, validator
+from pydantic import BaseModel, EmailStr, field_validator, Field, ConfigDict
 import re
 
 
@@ -9,36 +9,38 @@ class Token(BaseModel):
 
 
 class TokenPayload(BaseModel):
-    sub: str
+    sub: int | None = None
 
 
 class UserBase(BaseModel):
     email: EmailStr
     first_name: str
     last_name: str
+    is_active: bool = True
+    is_superuser: bool = False
 
 
 class UserCreate(UserBase):
-    password: str
+    password: str = Field(..., min_length=12)
     password_confirm: str
 
-    @validator("password")
-    def password_validation(cls, v):
+    @field_validator("password")
+    def validate_password(cls, v: str) -> str:
         if len(v) < 12:
             raise ValueError("Password must be at least 12 characters long")
-        if not re.search(r"[A-Z]", v):
+        if not any(c.isupper() for c in v):
             raise ValueError("Password must contain at least one uppercase letter")
-        if not re.search(r"[a-z]", v):
+        if not any(c.islower() for c in v):
             raise ValueError("Password must contain at least one lowercase letter")
-        if not re.search(r"[0-9]", v):
+        if not any(c.isdigit() for c in v):
             raise ValueError("Password must contain at least one number")
-        if not re.search(r'[!@#$%^&*(),.?":{}|<>]', v):
+        if not any(c in '!@#$%^&*(),.?":{}|<>' for c in v):
             raise ValueError("Password must contain at least one special character")
         return v
 
-    @validator("password_confirm")
-    def passwords_match(cls, v, values, **kwargs):
-        if "password" in values and v != values["password"]:
+    @field_validator("password_confirm")
+    def passwords_match(cls, v: str, values) -> str:
+        if "password" in values.data and v != values.data["password"]:
             raise ValueError("Passwords do not match")
         return v
 
@@ -53,5 +55,13 @@ class UserResponse(UserBase):
     is_active: bool
     is_superuser: bool
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserInDB(UserBase):
+    id: int
+    hashed_password: str
+
+
+class User(UserBase):
+    id: int
