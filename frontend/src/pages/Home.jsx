@@ -107,7 +107,7 @@ export default function Home() {
         </section>
 
         {/* Credentials Section */}
-        <section className="py-16 text-center bg-gray-50 dark:bg-gray-800 rounded-lg mb-6">
+        <section className="py-16 text-center bg-gray-50 dark:bg-gray-800 rounded-lg mb-6 px-4 sm:px-6 lg:px-8">
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-12">
             Our Credentials
           </h2>
