@@ -35,7 +35,12 @@ services:
       - ADMIN_CREATION_SECRET=${ADMIN_CREATION_SECRET}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
       - BACKEND_PORT=${BACKEND_PORT}
-    command: sh /app/scripts/start.sh
+    command: >
+      sh -c "while ! pg_isready -h db -p 5432 -U $POSTGRES_USER; do
+        echo 'Waiting for database...';
+        sleep 2;
+      done;
+      uvicorn app.main:app --host 0.0.0.0 --port 8000 $UVICORN_EXTRA_FLAGS"
     depends_on:
       db:
         condition: service_healthy

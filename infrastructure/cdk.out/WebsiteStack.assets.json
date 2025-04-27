@@ -1,0 +1,36 @@
+{
+  "version": "41.0.0",
+  "files": {
+    "faa95a81ae7d7373f3e1f242268f904eb748d8d0fdd306e8a6fe515a1905a7d6": {
+      "displayName": "WebsiteStack/Custom::S3AutoDeleteObjectsCustomResourceProvider Code",
+      "source": {
+        "path": "asset.faa95a81ae7d7373f3e1f242268f904eb748d8d0fdd306e8a6fe515a1905a7d6",
+        "packaging": "zip"
+      },
+      "destinations": {
+        "982534369227-us-west-1": {
+          "bucketName": "cdk-hnb659fds-assets-982534369227-us-west-1",
+          "objectKey": "faa95a81ae7d7373f3e1f242268f904eb748d8d0fdd306e8a6fe515a1905a7d6.zip",
+          "region": "us-west-1",
+          "assumeRoleArn": "arn:${AWS::Partition}:iam::982534369227:role/cdk-hnb659fds-file-publishing-role-982534369227-us-west-1"
+        }
+      }
+    },
+    "46034a2369321394fc429b8feb0c74ce4e68782887640be6be4a879b06a40f92": {
+      "displayName": "WebsiteStack Template",
+      "source": {
+        "path": "WebsiteStack.template.json",
+        "packaging": "file"
+      },
+      "destinations": {
+        "982534369227-us-west-1": {
+          "bucketName": "cdk-hnb659fds-assets-982534369227-us-west-1",
+          "objectKey": "46034a2369321394fc429b8feb0c74ce4e68782887640be6be4a879b06a40f92.json",
+          "region": "us-west-1",
+          "assumeRoleArn": "arn:${AWS::Partition}:iam::982534369227:role/cdk-hnb659fds-file-publishing-role-982534369227-us-west-1"
+        }
+      }
+    }
+  },
+  "dockerImages": {}
+}
