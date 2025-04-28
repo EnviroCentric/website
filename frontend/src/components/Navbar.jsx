@@ -1,10 +1,35 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import logo from '../assets/logo.png';
 
 export default function Navbar() {
   const { isDarkMode, toggleTheme } = useTheme();
+  const [navbarStyle, setNavbarStyle] = useState({
+    opacity: 0,
+    transform: 'translateY(20px)',
+  });
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollPosition = window.scrollY;
+      const maxScroll = 400;
+      
+      const progress = Math.min(1, scrollPosition / maxScroll);
+      // Only start appearing when progress is > 0.7 (70% scrolled)
+      const adjustedProgress = Math.max(0, (progress - 0.7) / 0.3);
+      const opacity = Math.min(1, adjustedProgress * 1.5);
+      const translateY = (1 - adjustedProgress) * 20;
+
+      setNavbarStyle({
+        opacity,
+        transform: `translateY(${translateY}px)`,
+      });
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const handleThemeToggle = () => {
     toggleTheme();
@@ -17,10 +42,18 @@ export default function Navbar() {
           {/* Empty div for spacing */}
           <div className="w-8"></div>
           
-          {/* Centered Logo */}
+          {/* Centered Logo with smooth transition */}
           <div className="flex-1 flex justify-center">
             <Link to="/" className="flex items-center">
-              <img src={logo} alt="Enviro-Centric Logo" className="h-12 w-auto" />
+              <img 
+                src={logo} 
+                alt="Enviro-Centric Logo" 
+                className="h-12 w-auto transition-all duration-300"
+                style={{
+                  ...navbarStyle,
+                  transition: 'all 0.1s ease-out',
+                }}
+              />
             </Link>
           </div>
 

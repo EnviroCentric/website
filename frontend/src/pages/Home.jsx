@@ -1,9 +1,53 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import logo from '../assets/logo.png';
 
 export default function Home() {
+  const [logoStyle, setLogoStyle] = useState({
+    height: '400px',
+    opacity: 1,
+    transform: 'translateY(0)',
+  });
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollPosition = window.scrollY;
+      const maxScroll = 400;
+      const minSize = 48;
+      const maxSize = 400;
+      
+      const progress = Math.min(1, scrollPosition / maxScroll);
+      const newHeight = maxSize - (progress * (maxSize - minSize));
+      const opacity = Math.max(0, 1 - (progress * 1.5));
+      const translateY = -progress * 100;
+
+      setLogoStyle({
+        height: `${newHeight}px`,
+        opacity,
+        transform: `translateY(${translateY}px)`,
+      });
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900 transition-colors duration-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+      {/* Large Logo Section */}
+      <div className="flex justify-center items-center h-[70vh] relative">
+        <img 
+          src={logo} 
+          alt="Enviro-Centric Logo" 
+          className="transition-all duration-300 absolute bottom-0"
+          style={{
+            ...logoStyle,
+            width: 'auto',
+            transition: 'all 0.1s ease-out',
+          }}
+        />
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6" style={{ marginTop: '-50px' }}>
         {/* Services Section */}
         <section className="py-16 text-center">
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-12">
