@@ -1,28 +1,41 @@
-from pydantic import BaseModel, EmailStr
 from typing import Optional
 from datetime import datetime
+from pydantic import BaseModel, EmailStr, ConfigDict, field_validator
 
 
 class UserBase(BaseModel):
-    email: EmailStr
-    first_name: str
-    last_name: str
-    is_active: Optional[bool] = True
-    is_superuser: Optional[bool] = False
+    email: Optional[EmailStr] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    is_active: Optional[bool] = None
+    is_superuser: Optional[bool] = None
+
+    @field_validator("first_name", "last_name")
+    def validate_name(cls, v):
+        if v is not None and v.strip() == "":
+            raise ValueError("Name cannot be empty")
+        return v
 
 
 class UserCreate(UserBase):
+    email: EmailStr
     password: str
+    first_name: str
+    last_name: str
 
 
 class UserUpdate(UserBase):
-    password: Optional[str] = None
+    pass
+
+
+class PasswordUpdate(BaseModel):
+    current_password: str
+    new_password: str
 
 
 class UserResponse(UserBase):
     id: int
-    created_at: datetime
+    created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

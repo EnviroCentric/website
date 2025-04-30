@@ -84,24 +84,27 @@ export default function Login({ isOpen, onClose, onSwitchToRegister, successMess
     }
 
     try {
-      const res = await api.post('/auth/login', formData);
-      login(res.data.access_token);
-      localStorage.removeItem('loginFormData');
-      onClose();
-      navigate(from, { replace: true });
+      const formPayload = new FormData();
+      formPayload.append('username', formData.email);
+      formPayload.append('password', formData.password);
+      
+      const res = await api.post('/auth/login', formPayload, {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      });
+      
+      if (res.data.access_token) {
+        login(res.data.access_token);
+        localStorage.removeItem('loginFormData');
+        onClose();
+        navigate(from, { replace: true });
+      } else {
+        setError('Login failed. Please try again.');
+      }
     } catch (err) {
       if (err.response?.status === 401) {
-        // Check if the email exists when login fails
-        try {
-          const emailCheck = await api.get(`/users/check-email/${encodeURIComponent(formData.email)}`);
-          if (!emailCheck.data.exists) {
-            setEmailError('This email is not registered. Would you like to create an account?');
-          } else {
-            setError('Incorrect password. Please try again.');
-          }
-        } catch (checkErr) {
-          setError('Login failed. Please try again.');
-        }
+        setError('Incorrect email or password. Please try again.');
       } else {
         setError(err.response?.data?.message || 'Login failed. Please try again.');
       }
@@ -198,7 +201,8 @@ export default function Login({ isOpen, onClose, onSwitchToRegister, successMess
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center z-20 hover:text-gray-500 dark:hover:text-gray-300"
+                tabIndex="-1"
+                className="absolute inset-y-0 right-0 pr-3 flex items-center z-20"
               >
                 {showPassword ? (
                   <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">

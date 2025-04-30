@@ -201,7 +201,8 @@ export default function Register({ isOpen, onClose, onSwitchToLogin }) {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center z-20 hover:text-gray-500 dark:hover:text-gray-300"
+                tabIndex="-1"
+                className="absolute inset-y-0 right-0 pr-3 flex items-center z-20"
               >
                 {showPassword ? (
                   <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -231,7 +232,8 @@ export default function Register({ isOpen, onClose, onSwitchToLogin }) {
               <button
                 type="button"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center z-20 hover:text-gray-500 dark:hover:text-gray-300"
+                tabIndex="-1"
+                className="absolute inset-y-0 right-0 pr-3 flex items-center z-20"
               >
                 {showConfirmPassword ? (
                   <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">

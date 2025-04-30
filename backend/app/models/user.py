@@ -1,6 +1,8 @@
 from sqlalchemy import Boolean, Column, Integer, String, DateTime
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.base_class import Base
+from app.models.base import user_role
 
 
 class User(Base):
@@ -15,3 +17,6 @@ class User(Base):
     is_superuser = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    roles = relationship("Role", secondary=user_role, back_populates="users")

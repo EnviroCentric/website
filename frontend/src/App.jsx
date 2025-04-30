@@ -1,13 +1,21 @@
 import './index.css';
 import { Routes, Route } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
+import Navbar from './components/Navbar';
 import Home from './pages/Home';
 import Dashboard from './pages/Dashboard';
+import Profile from './pages/Profile';
+import ProfileEdit from './pages/ProfileEdit';
+import ProfilePassword from './pages/ProfilePassword';
 import ProtectedRoute from './routes/ProtectedRoute';
-import Navbar from './components/Navbar';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import AccessManagement from './pages/AccessManagement';
 
 function App() {
   return (
-    <div className="min-h-screen bg-white dark:bg-gray-900 transition-colors duration-200">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar />
       <main className="pt-16 pb-6 min-h-[calc(100vh-4rem)] bg-white dark:bg-gray-900">
         <Routes>
@@ -20,6 +28,33 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <Profile />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile/edit"
+            element={
+              <ProtectedRoute>
+                <ProfileEdit />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile/password"
+            element={
+              <ProtectedRoute>
+                <ProfilePassword />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/access-management" element={<AccessManagement />} />
         </Routes>
       </main>
     </div>

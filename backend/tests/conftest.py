@@ -6,6 +6,9 @@ from sqlalchemy.orm import sessionmaker
 from app.main import app
 from app.db.session import get_db
 from app.db.base_class import Base
+from app.core.security import create_access_token
+from app.models.user import User
+from app.models.role import Role
 import os
 
 # Set test environment
@@ -85,3 +88,57 @@ async def client(db):
     async with AsyncClient(app=app, base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(scope="function")
+async def superuser_token_headers(db):
+    """Create a superuser and return their auth headers."""
+    # Create a superuser role if it doesn't exist
+    superuser_role = db.query(Role).filter(Role.name == "admin").first()
+    if not superuser_role:
+        superuser_role = Role(name="admin")
+        db.add(superuser_role)
+        db.commit()
+
+    # Create a superuser
+    user = User(
+        email="superuser@example.com",
+        hashed_password="$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",  # "password"
+        first_name="Super",
+        last_name="User",
+        is_superuser=True,
+    )
+    user.roles.append(superuser_role)
+    db.add(user)
+    db.commit()
+
+    # Create access token
+    access_token = create_access_token(subject=user.email)
+    return {"Authorization": f"Bearer {access_token}"}
+
+
+@pytest.fixture(scope="function")
+async def normal_user_token_headers(db):
+    """Create a normal user and return their auth headers."""
+    # Create a user role if it doesn't exist
+    user_role = db.query(Role).filter(Role.name == "user").first()
+    if not user_role:
+        user_role = Role(name="user")
+        db.add(user_role)
+        db.commit()
+
+    # Create a normal user
+    user = User(
+        email="user@example.com",
+        hashed_password="$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",  # "password"
+        first_name="Normal",
+        last_name="User",
+        is_superuser=False,
+    )
+    user.roles.append(user_role)
+    db.add(user)
+    db.commit()
+
+    # Create access token
+    access_token = create_access_token(subject=user.email)
+    return {"Authorization": f"Bearer {access_token}"}

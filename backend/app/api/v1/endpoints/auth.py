@@ -34,8 +34,8 @@ async def login(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user"
         )
     return {
-        "access_token": create_access_token(user.id),
-        "refresh_token": create_refresh_token(user.id),
+        "access_token": create_access_token(user.email),
+        "refresh_token": create_refresh_token(user.email),
         "token_type": "bearer",
     }
 
@@ -74,8 +74,8 @@ async def refresh_token(
             settings.JWT_REFRESH_SECRET_KEY,
             algorithms=[settings.JWT_ALGORITHM],
         )
-        user_id: str = payload.get("sub")
-        if user_id is None:
+        email: str = payload.get("sub")
+        if email is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Could not validate credentials",
@@ -85,7 +85,7 @@ async def refresh_token(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
         )
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(User.email == email).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -97,7 +97,7 @@ async def refresh_token(
             detail="Inactive user",
         )
     return {
-        "access_token": create_access_token(user.id),
-        "refresh_token": create_refresh_token(user.id),
+        "access_token": create_access_token(user.email),
+        "refresh_token": create_refresh_token(user.email),
         "token_type": "bearer",
     }

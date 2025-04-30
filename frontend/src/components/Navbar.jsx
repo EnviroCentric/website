@@ -1,15 +1,59 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useRef, useEffect } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import Login from '../pages/Login';
 import Register from '../pages/Register';
 
+const navigation = [
+  { name: "Home", href: "/", current: true }
+];
+
+const userMenuOptions = [
+  { name: "Profile", href: "/profile", icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" },
+  { name: "Access Management", href: "/access-management", icon: "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" },
+  { name: "Logout", action: "logout", icon: "M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" }
+];
+
 export default function Navbar() {
-  const { isAuthenticated, logout } = useAuth();
+  const { isAuthenticated, logout, user } = useAuth();
   const { isDarkMode, toggleTheme } = useTheme();
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [changed, setChanged] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const profileMenuRef = useRef(null);
+
+  const isSuperuser = user?.is_superuser || user?.roles?.some(role => role.name.toLowerCase() === 'admin');
+
+  const onNav = () => {
+    for (let nav of navigation) {
+      if (nav.href === location.pathname) {
+        nav.current = true;
+      } else {
+        nav.current = false;
+      }
+    }
+    setChanged(!changed);
+  };
+
+  useEffect(() => {
+    onNav();
+  }, [location.pathname]);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target)) {
+        setIsProfileMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const handleThemeToggle = () => {
     toggleTheme();
@@ -23,6 +67,12 @@ export default function Navbar() {
   const handleSwitchToLogin = () => {
     setIsRegisterOpen(false);
     setIsLoginOpen(true);
+  };
+
+  const handleLogout = () => {
+    logout();
+    setIsProfileMenuOpen(false);
+    navigate('/');
   };
 
   return (
@@ -53,12 +103,62 @@ export default function Navbar() {
               </button>
 
               {isAuthenticated ? (
-                <button
-                  onClick={logout}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  Logout
-                </button>
+                <div className="relative" ref={profileMenuRef}>
+                  <button
+                    onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                    className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none"
+                  >
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </button>
+                  {isProfileMenuOpen && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-50">
+                      {userMenuOptions
+                        .filter(option => {
+                          if (option.name === "Access Management") {
+                            return isSuperuser;
+                          }
+                          return true;
+                        })
+                        .map((option) => (
+                          <div key={option.name}>
+                            {option.href ? (
+                              <Link
+                                to={option.href}
+                                className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                onClick={() => setIsProfileMenuOpen(false)}
+                              >
+                                <div className="flex items-center">
+                                  <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={option.icon} />
+                                  </svg>
+                                  {option.name}
+                                </div>
+                              </Link>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  if (option.action === 'logout') {
+                                    handleLogout();
+                                  }
+                                  setIsProfileMenuOpen(false);
+                                }}
+                                className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                              >
+                                <div className="flex items-center">
+                                  <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={option.icon} />
+                                  </svg>
+                                  {option.name}
+                                </div>
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
               ) : (
                 <button
                   onClick={() => setIsLoginOpen(true)}

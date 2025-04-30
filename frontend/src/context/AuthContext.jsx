@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 
 const AuthContext = createContext();
 
@@ -10,43 +9,49 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      // Verify token and get user data
-      axios.get('/api/auth/verify', {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      .then(response => {
-        setUser(response.data.user);
-        setIsAuthenticated(true);
-      })
-      .catch(() => {
-        localStorage.removeItem('token');
-      })
-      .finally(() => {
-        setLoading(false);
+  const fetchUserData = async (token) => {
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/users/self`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
       });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch user data');
+      }
+
+      const userData = await response.json();
+      setUser(userData);
+      setIsAuthenticated(true);
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+      localStorage.removeItem('access_token');
+      setUser(null);
+      setIsAuthenticated(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    if (token) {
+      fetchUserData(token);
     } else {
+      setIsAuthenticated(false);
       setLoading(false);
     }
   }, []);
 
-  const login = async (email, password) => {
-    try {
-      const response = await axios.post('/api/auth/login', { email, password });
-      const { token, user } = response.data;
-      localStorage.setItem('token', token);
-      setUser(user);
-      setIsAuthenticated(true);
-      return user;
-    } catch (error) {
-      throw error;
-    }
+  const login = async (accessToken) => {
+    localStorage.setItem('access_token', accessToken);
+    await fetchUserData(accessToken);
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('loginFormData');
     setUser(null);
     setIsAuthenticated(false);
     navigate('/');
@@ -57,7 +62,9 @@ export function AuthProvider({ children }) {
     isAuthenticated,
     loading,
     login,
-    logout
+    logout,
+    token: localStorage.getItem('access_token'),
+    setUser
   };
 
   return (
