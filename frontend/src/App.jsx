@@ -12,52 +12,87 @@ import ProtectedRoute from './routes/ProtectedRoute';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import AccessManagement from './pages/AccessManagement';
+import RoleManagement from './pages/RoleManagement';
+import UserManagement from './pages/UserManagement';
+import { RolesProvider } from './context/RolesContext';
+import { PermissionsProvider } from './context/PermissionsContext';
 
 function App() {
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Navbar />
-      <main className="pt-16 pb-6 min-h-[calc(100vh-4rem)] bg-white dark:bg-gray-900">
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/profile"
-            element={
-              <ProtectedRoute>
-                <Profile />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/profile/edit"
-            element={
-              <ProtectedRoute>
-                <ProfileEdit />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/profile/password"
-            element={
-              <ProtectedRoute>
-                <ProfilePassword />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/access-management" element={<AccessManagement />} />
-        </Routes>
-      </main>
-    </div>
+    <AuthProvider>
+      <RolesProvider>
+        <PermissionsProvider>
+          <ThemeProvider>
+            <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+              <Navbar />
+              <main className="pt-16 pb-6 min-h-[calc(100vh-4rem)] bg-white dark:bg-gray-900">
+                <Routes>
+                  <Route path="/" element={<Home />} />
+                  <Route
+                    path="/dashboard"
+                    element={
+                      <ProtectedRoute>
+                        <Dashboard />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/profile"
+                    element={
+                      <ProtectedRoute>
+                        <Profile />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/profile/edit"
+                    element={
+                      <ProtectedRoute>
+                        <ProfileEdit />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/profile/password"
+                    element={
+                      <ProtectedRoute>
+                        <ProfilePassword />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/register" element={<Register />} />
+                  <Route
+                    path="/access-management"
+                    element={
+                      <ProtectedRoute>
+                        <AccessManagement />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/role-management"
+                    element={
+                      <ProtectedRoute>
+                        <RoleManagement />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/user-management"
+                    element={
+                      <ProtectedRoute>
+                        <UserManagement />
+                      </ProtectedRoute>
+                    }
+                  />
+                </Routes>
+              </main>
+            </div>
+          </ThemeProvider>
+        </PermissionsProvider>
+      </RolesProvider>
+    </AuthProvider>
   );
 }
 

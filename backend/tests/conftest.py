@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from app.main import app
 from app.db.session import get_db
 from app.db.base_class import Base
-from app.core.security import create_access_token
+from app.core.security import create_access_token, get_password_hash
 from app.models.user import User
 from app.models.role import Role
 import os
@@ -142,3 +142,41 @@ async def normal_user_token_headers(db):
     # Create access token
     access_token = create_access_token(subject=user.email)
     return {"Authorization": f"Bearer {access_token}"}
+
+
+@pytest.fixture(scope="function")
+async def test_user(db):
+    """Create a test user."""
+    user = User(
+        email="test@example.com",
+        hashed_password=get_password_hash("testpass123"),
+        first_name="Test",
+        last_name="User",
+        is_superuser=False,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@pytest.fixture(scope="function")
+async def test_superuser(db):
+    """Create a test superuser."""
+    superuser = User(
+        email="testsuper@example.com",
+        hashed_password=get_password_hash("testpass123"),
+        first_name="Test",
+        last_name="Superuser",
+        is_superuser=True,
+    )
+    db.add(superuser)
+    db.commit()
+    db.refresh(superuser)
+    return superuser
+
+
+@pytest.fixture(scope="function")
+async def test_db(db):
+    """Alias for db fixture to maintain compatibility with existing tests."""
+    return db

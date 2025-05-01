@@ -1,92 +1,96 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useRoles } from '../context/RolesContext';
+import { usePermissions } from '../context/PermissionsContext';
 
 export default function AccessManagement() {
   const { token, isAuthenticated, user } = useAuth();
+  const { roles, fetchRoles } = useRoles();
+  const { 
+    permissions, 
+    rolePermissions, 
+    fetchPermissions, 
+    fetchRolePermissions, 
+    updateRolePermissions,
+    formatPermissionName 
+  } = usePermissions();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [roles, setRoles] = useState([]);
-  const [permissions, setPermissions] = useState([]);
   const [selectedRole, setSelectedRole] = useState(null);
   const [selectedPermissions, setSelectedPermissions] = useState([]);
   const [pendingChanges, setPendingChanges] = useState({});
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [hasAccess, setHasAccess] = useState(false);
+  const initialLoadDone = useRef(false);
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      navigate('/');
-      return;
-    }
-
-    // Check if user has admin role using the user data we already have
-    const isAdmin = user?.is_superuser || user?.roles?.some(role => role.name.toLowerCase() === 'admin');
-    setHasAccess(isAdmin);
-
-    if (isAdmin) {
-      fetchData();
-    } else {
-      navigate('/');
-    }
-    setIsLoading(false);
-  }, [isAuthenticated, user, navigate]);
-
-  const fetchData = async () => {
-    try {
-      const [rolesResponse, permissionsResponse] = await Promise.all([
-        fetch(`${import.meta.env.VITE_API_URL}/roles`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }),
-        fetch(`${import.meta.env.VITE_API_URL}/roles/permissions`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }),
-      ]);
-
-      if (!rolesResponse.ok || !permissionsResponse.ok) {
-        throw new Error('Failed to fetch data');
+    const checkAccessAndFetchData = async () => {
+      if (!isAuthenticated) {
+        navigate('/');
+        return;
       }
 
-      const [rolesData, permissionsData] = await Promise.all([
-        rolesResponse.json(),
-        permissionsResponse.json(),
-      ]);
+      const hasPermission = user?.is_superuser || user?.roles?.some(role =>
+        role.permissions?.some(permission => permission.name === 'manage_roles')
+      );
+      setHasAccess(hasPermission);
 
-      // Filter out the admin role
-      const filteredRoles = rolesData.filter(role => role.name.toLowerCase() !== 'admin');
-      setRoles(filteredRoles);
-      setPermissions(permissionsData);
-    } catch (err) {
-      setError(err.message);
+      if (hasPermission && !initialLoadDone.current) {
+        try {
+          // Fetch roles and permissions in parallel
+          await Promise.all([
+            fetchRoles(),
+            fetchPermissions()
+          ]);
+          
+          // Only fetch role permissions if we have roles
+          if (roles.length > 0) {
+            await fetchRolePermissions(roles);
+          }
+          
+          initialLoadDone.current = true;
+        } catch (err) {
+          setError(err.message);
+        } finally {
+          setIsLoading(false);
+        }
+      } else if (!hasPermission) {
+        navigate('/');
+      } else {
+        setIsLoading(false);
+      }
+    };
+
+    checkAccessAndFetchData();
+  }, [isAuthenticated, user, navigate, fetchRoles, fetchPermissions, fetchRolePermissions, roles]);
+
+  // Update role permissions when roles change
+  useEffect(() => {
+    if (roles.length > 0 && initialLoadDone.current) {
+      fetchRolePermissions(roles);
     }
-  };
+  }, [roles, fetchRolePermissions]);
 
-  const handleRoleSelect = async (role) => {
+  useEffect(() => {
+    const roleId = searchParams.get('role');
+    if (roleId && roles.length > 0 && Object.keys(rolePermissions).length > 0) {
+      const role = roles.find(r => r.role_id === parseInt(roleId));
+      if (role) {
+        setSelectedRole(role);
+        setSelectedPermissions(rolePermissions[role.role_id] || []);
+      }
+    }
+  }, [roles, searchParams, rolePermissions]);
+
+  const handleRoleSelect = useCallback((role) => {
     setSelectedRole(role);
-    try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/roles/${role.role_id}/permissions`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+    setSelectedPermissions(rolePermissions[role.role_id] || []);
+  }, [rolePermissions]);
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch role permissions');
-      }
-
-      const data = await response.json();
-      setSelectedPermissions(data.permissions || []);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  const handlePermissionToggle = (permission) => {
+  const handlePermissionToggle = useCallback((permission) => {
     if (!selectedRole) return;
 
     const isAdding = !selectedPermissions.includes(permission);
@@ -122,21 +126,21 @@ export default function AccessManagement() {
         };
       }
     });
-  };
+  }, [selectedRole, selectedPermissions]);
 
   const handleSubmit = async () => {
     try {
       for (const [roleId, changes] of Object.entries(pendingChanges)) {
         const currentPermissions = selectedRole?.role_id === parseInt(roleId) 
           ? selectedPermissions 
-          : [];
+          : rolePermissions[roleId] || [];
         
         const finalPermissions = [
           ...currentPermissions.filter(p => !changes.removed.includes(p)),
           ...changes.added
         ];
 
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/roles/${roleId}/permissions`, {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/roles/${roleId}/permissions/`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -145,31 +149,25 @@ export default function AccessManagement() {
           body: JSON.stringify({ permissions: finalPermissions }),
         });
 
-        if (!response.ok) {
-          throw new Error(`Failed to update permissions for role ${roleId}`);
-        }
+        if (!response.ok) throw new Error(`Failed to update permissions for role ${roleId}`);
+
+        // Update local state
+        updateRolePermissions(roleId, finalPermissions);
       }
 
       setPendingChanges({});
-      await fetchData();
       setShowConfirmationModal(false);
     } catch (err) {
       setError(err.message);
     }
   };
 
-  const formatRoleName = (name) => {
+  const formatRoleName = useCallback((name) => {
     return name
       .split(/[\s_-]/)
       .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
       .join(' ');
-  };
-
-  const formatPermissionName = (name) => {
-    return name.split('_').map(word => 
-      word.charAt(0).toUpperCase() + word.slice(1)
-    ).join(' ');
-  };
+  }, []);
 
   if (isLoading) {
     return (
@@ -276,7 +274,14 @@ export default function AccessManagement() {
 
       {/* Confirmation Modal */}
       {showConfirmationModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+        <div 
+          className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowConfirmationModal(false);
+            }
+          }}
+        >
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl">
             {/* Modal Header */}
             <div className="p-6 border-b border-gray-200 dark:border-gray-700">
