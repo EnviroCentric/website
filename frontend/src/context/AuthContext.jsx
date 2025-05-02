@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const AuthContext = createContext();
@@ -8,9 +8,22 @@ export function AuthProvider({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const fetchInProgress = useRef(false);
+  const lastFetchTime = useRef(0);
+  const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes in milliseconds
 
-  const fetchUserData = async (token) => {
+  const fetchUserData = async (token, force = false) => {
+    const now = Date.now();
+    if (!force && user && now - lastFetchTime.current < CACHE_DURATION) {
+      return; // Use cached data if it's still valid
+    }
+
+    if (fetchInProgress.current) {
+      return; // Prevent concurrent fetches
+    }
+
     try {
+      fetchInProgress.current = true;
       const response = await fetch(`${import.meta.env.VITE_API_URL}/users/self`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -24,6 +37,7 @@ export function AuthProvider({ children }) {
       const userData = await response.json();
       setUser(userData);
       setIsAuthenticated(true);
+      lastFetchTime.current = now;
     } catch (error) {
       console.error('Error fetching user data:', error);
       localStorage.removeItem('access_token');
@@ -31,6 +45,7 @@ export function AuthProvider({ children }) {
       setIsAuthenticated(false);
     } finally {
       setLoading(false);
+      fetchInProgress.current = false;
     }
   };
 
@@ -46,7 +61,7 @@ export function AuthProvider({ children }) {
 
   const login = async (accessToken) => {
     localStorage.setItem('access_token', accessToken);
-    await fetchUserData(accessToken);
+    await fetchUserData(accessToken, true); // Force fetch on login
   };
 
   const logout = () => {
@@ -57,6 +72,13 @@ export function AuthProvider({ children }) {
     navigate('/');
   };
 
+  const refreshUserData = async () => {
+    const token = localStorage.getItem('access_token');
+    if (token) {
+      await fetchUserData(token, true); // Force refresh
+    }
+  };
+
   const value = {
     user,
     isAuthenticated,
@@ -64,7 +86,8 @@ export function AuthProvider({ children }) {
     login,
     logout,
     token: localStorage.getItem('access_token'),
-    setUser
+    setUser,
+    refreshUserData
   };
 
   return (

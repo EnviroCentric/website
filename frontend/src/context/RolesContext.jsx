@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
 
 const RolesContext = createContext();
@@ -8,11 +8,22 @@ export function RolesProvider({ children }) {
   const [roles, setRoles] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const fetchInProgress = useRef(false);
+  const lastFetchTime = useRef(0);
+  const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes in milliseconds
 
-  const fetchRoles = useCallback(async () => {
-    if (roles.length > 0) return; // Already loaded
+  const fetchRoles = useCallback(async (force = false) => {
+    const now = Date.now();
+    if (!force && roles.length > 0 && now - lastFetchTime.current < CACHE_DURATION) {
+      return; // Use cached data if it's still valid
+    }
+
+    if (fetchInProgress.current) {
+      return; // Prevent concurrent fetches
+    }
 
     try {
+      fetchInProgress.current = true;
       setIsLoading(true);
       const response = await fetch(`${import.meta.env.VITE_API_URL}/roles/`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -23,10 +34,12 @@ export function RolesProvider({ children }) {
       // Filter out the admin role
       const filteredRoles = data.filter(role => role.name.toLowerCase() !== 'admin');
       setRoles(filteredRoles);
+      lastFetchTime.current = now;
     } catch (err) {
       setError(err.message);
     } finally {
       setIsLoading(false);
+      fetchInProgress.current = false;
     }
   }, [token, roles.length]);
 

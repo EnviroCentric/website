@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useRoles } from '../context/RolesContext';
 
 export default function UserManagement() {
-  const { token, isAuthenticated, user: currentUser } = useAuth();
+  const { token, isAuthenticated, user: currentUser, refreshUserData } = useAuth();
   const { roles, fetchRoles } = useRoles();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
@@ -14,14 +14,15 @@ export default function UserManagement() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [editedUser, setEditedUser] = useState({
-    first_name: '',
-    last_name: '',
     email: '',
     is_active: true,
     roles: []
   });
   const [hasAccess, setHasAccess] = useState(false);
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
+  const fetchInProgress = useRef(false);
+  const lastFetchTime = useRef(0);
+  const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes in milliseconds
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -46,19 +47,33 @@ export default function UserManagement() {
     setIsLoading(false);
   }, [isAuthenticated, currentUser, navigate]);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (force = false) => {
+    const now = Date.now();
+    if (!force && users.length > 0 && now - lastFetchTime.current < CACHE_DURATION) {
+      return; // Use cached data if it's still valid
+    }
+
+    if (fetchInProgress.current) {
+      return; // Prevent concurrent fetches
+    }
+
     try {
-      await fetchRoles(); // This will only fetch if roles are not already loaded
+      fetchInProgress.current = true;
+      await fetchRoles(force); // This will use the cached roles if available
       
       const usersRes = await fetch(`${import.meta.env.VITE_API_URL}/users/`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!usersRes.ok) throw new Error('Failed to fetch users');
-      setUsers(await usersRes.json());
+      const usersData = await usersRes.json();
+      setUsers(usersData);
+      lastFetchTime.current = now;
     } catch (err) {
       setError(err.message);
+    } finally {
+      fetchInProgress.current = false;
     }
-  }, [token, fetchRoles]);
+  }, [token, fetchRoles, users.length]);
 
   const handleEditUser = async () => {
     try {
@@ -69,8 +84,6 @@ export default function UserManagement() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          first_name: editedUser.first_name,
-          last_name: editedUser.last_name,
           is_active: editedUser.is_active,
         }),
       });
@@ -92,14 +105,19 @@ export default function UserManagement() {
       const updatedRoles = roles.filter(r => editedUser.roles.includes(r.id));
       const updatedUsers = users.map(u =>
         u.id === selectedUser.id
-          ? { ...u, ...editedUser, roles: updatedRoles }
+          ? { ...u, is_active: editedUser.is_active, roles: updatedRoles }
           : u
       );
       setUsers(updatedUsers);
 
+      // If the edited user is the current user, refresh user data
+      if (selectedUser.id === currentUser.id) {
+        await refreshUserData();
+      }
+
       setShowEditModal(false);
       setSelectedUser(null);
-      setEditedUser({ first_name: '', last_name: '', email: '', is_active: true, roles: [] });
+      setEditedUser({ email: '', is_active: true, roles: [] });
     } catch (err) {
       setError(err.message);
     }
@@ -210,7 +228,9 @@ export default function UserManagement() {
                               key={role.id}
                               className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
                             >
-                              {role.name}
+                              {(role.name || 'Unnamed Role').split(' ')
+                                .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                                .join(' ')}
                             </span>
                           ))}
                         </div>
@@ -232,8 +252,6 @@ export default function UserManagement() {
                             onClick={() => {
                               setSelectedUser(user);
                               setEditedUser({
-                                first_name: user.first_name,
-                                last_name: user.last_name,
                                 email: user.email,
                                 is_active: user.is_active,
                                 roles: user.roles.map(r => r.id)
@@ -258,14 +276,12 @@ export default function UserManagement() {
       {/* Edit Modal */}
       {showEditModal && (
         <div 
-          className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center p-4"
+          className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center p-4 z-50"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               setShowEditModal(false);
               setSelectedUser(null);
               setEditedUser({
-                first_name: '',
-                last_name: '',
                 email: '',
                 is_active: true,
                 roles: []
@@ -273,115 +289,145 @@ export default function UserManagement() {
             }
           }}
         >
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md">
-            <div className="p-6">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-                Edit User
-              </h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    First Name
-                  </label>
-                  <input
-                    type="text"
-                    value={editedUser.first_name}
-                    onChange={(e) =>
-                      setEditedUser({ ...editedUser, first_name: e.target.value })
-                    }
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white px-4 py-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Last Name
-                  </label>
-                  <input
-                    type="text"
-                    value={editedUser.last_name}
-                    onChange={(e) =>
-                      setEditedUser({ ...editedUser, last_name: e.target.value })
-                    }
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white px-4 py-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={editedUser.email}
-                    disabled
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 dark:bg-gray-600 dark:border-gray-600 dark:text-gray-400 px-4 py-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Roles
-                  </label>
-                  <div className="mt-2 space-y-2">
-                    {roles.map((role, index) => (
-                      <label
-                        key={role?.id ? `role-${role.id}` : `role-${index}`}
-                        className="inline-flex items-center mr-4"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={editedUser.roles.includes(role?.id)}
-                          onChange={(e) => {
-                            const newRoles = e.target.checked
-                              ? [...editedUser.roles, role?.id]
-                              : editedUser.roles.filter((id) => id !== role?.id);
-                            setEditedUser({ ...editedUser, roles: newRoles });
-                          }}
-                          className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600"
-                        />
-                        <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
-                          {role?.name || 'Unnamed Role'}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Status
-                  </label>
-                  <button
-                    onClick={() => {
-                      setEditedUser({ ...editedUser, is_active: !editedUser.is_active });
-                    }}
-                    className={`px-4 py-2 rounded-md text-sm font-medium ${
-                      editedUser.is_active
-                        ? 'bg-red-100 text-red-800 hover:bg-red-200 dark:bg-red-900 dark:text-red-200 dark:hover:bg-red-800'
-                        : 'bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-900 dark:text-green-200 dark:hover:bg-green-800'
-                    }`}
-                  >
-                    {editedUser.is_active ? 'Deactivate' : 'Activate'}
-                  </button>
-                </div>
-              </div>
-              <div className="mt-6 flex justify-end space-x-3">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg transform transition-all">
+            <div className="p-8">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  Manage User
+                </h2>
                 <button
                   onClick={() => {
                     setShowEditModal(false);
                     setSelectedUser(null);
                     setEditedUser({
-                      first_name: '',
-                      last_name: '',
                       email: '',
                       is_active: true,
                       roles: []
                     });
                   }}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+                  className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 transition-colors"
+                >
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* User Info Card */}
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
+                  <div className="flex items-center space-x-4">
+                    <div className="flex-shrink-0">
+                      <div className="h-12 w-12 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                        <span className="text-xl font-semibold text-blue-600 dark:text-blue-300">
+                          {editedUser.email.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                        {editedUser.email}
+                      </p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        User ID: {selectedUser?.id}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Status Toggle */}
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-900 dark:text-white">Account Status</h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        {editedUser.is_active ? 'User can access the system' : 'User access is restricted'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setEditedUser({ ...editedUser, is_active: !editedUser.is_active });
+                      }}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                        editedUser.is_active ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-600'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          editedUser.is_active ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Roles Section */}
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
+                  <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-4">User Roles</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {roles.map((role, index) => (
+                      <label
+                        key={role?.role_id ? `role-${role.role_id}` : `role-${index}`}
+                        className="relative flex items-start p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600/50 cursor-pointer transition-colors"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={editedUser.roles.includes(role.role_id)}
+                              onChange={(e) => {
+                                console.log('Current roles:', editedUser.roles);
+                                console.log('Role being toggled:', role);
+                                
+                                const newRoles = e.target.checked
+                                  ? [...editedUser.roles, role.role_id]
+                                  : editedUser.roles.filter(id => id !== role.role_id);
+                                
+                                console.log('New roles:', newRoles);
+                                setEditedUser(prev => ({
+                                  ...prev,
+                                  roles: newRoles
+                                }));
+                              }}
+                              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600"
+                            />
+                            <span className="ml-3 text-sm font-medium text-gray-900 dark:text-white">
+                              {(role.name || 'Unnamed Role').split(' ')
+                                .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                                .join(' ')}
+                            </span>
+                          </div>
+                          {role.description && (
+                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                              {role.description.charAt(0).toUpperCase() + role.description.slice(1)}
+                            </p>
+                          )}
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="mt-8 flex justify-end space-x-3">
+                <button
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setSelectedUser(null);
+                    setEditedUser({
+                      email: '',
+                      is_active: true,
+                      roles: []
+                    });
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={() => setShowConfirmationModal(true)}
-                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 >
                   Save Changes
                 </button>
@@ -394,61 +440,68 @@ export default function UserManagement() {
       {/* Confirmation Modal */}
       {showConfirmationModal && (
         <div 
-          className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center p-4"
+          className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center p-4 z-50"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               setShowConfirmationModal(false);
             }
           }}
         >
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md">
-            <div className="p-6">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-                Confirm Changes
-              </h2>
-              <div className="space-y-4">
-                <div>
-                  <h3 className="font-medium text-gray-900 dark:text-white mb-2">User Details</h3>
-                  <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-md">
-                    <p className="text-sm text-gray-600 dark:text-gray-300">
-                      <span className="font-medium">Name:</span> {editedUser.first_name} {editedUser.last_name}
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-300">
-                      <span className="font-medium">Email:</span> {editedUser.email}
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-300">
-                      <span className="font-medium">Status:</span>{' '}
-                      <span className={editedUser.is_active ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md transform transition-all">
+            <div className="p-8">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  Confirm Changes
+                </h2>
+                <button
+                  onClick={() => setShowConfirmationModal(false)}
+                  className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 transition-colors"
+                >
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
+                  <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Changes Summary</h3>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-600 dark:text-gray-400">Account Status</span>
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        editedUser.is_active
+                          ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                          : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                      }`}>
                         {editedUser.is_active ? 'Active' : 'Inactive'}
                       </span>
-                    </p>
-                  </div>
-                </div>
-                <div>
-                  <h3 className="font-medium text-gray-900 dark:text-white mb-2">Role Changes</h3>
-                  <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-md">
-                    <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
-                      <span className="font-medium">Selected Roles:</span>
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {roles
-                        .filter(role => editedUser.roles.includes(role.id))
-                        .map(role => (
-                          <span
-                            key={role.id}
-                            className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-                          >
-                            {role.name}
-                          </span>
-                        ))}
+                    </div>
+                    <div>
+                      <span className="text-sm text-gray-600 dark:text-gray-400">Selected Roles</span>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {roles
+                          .filter(role => editedUser.roles.includes(role.role_id))
+                          .map(role => (
+                            <span
+                              key={role.role_id}
+                              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                            >
+                              {role.name.split(' ')
+                                .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                                .join(' ')}
+                            </span>
+                          ))}
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-              <div className="mt-6 flex justify-end space-x-3">
+
+              <div className="mt-8 flex justify-end space-x-3">
                 <button
                   onClick={() => setShowConfirmationModal(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                 >
                   Cancel
                 </button>
@@ -457,7 +510,7 @@ export default function UserManagement() {
                     handleEditUser();
                     setShowConfirmationModal(false);
                   }}
-                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 >
                   Confirm Changes
                 </button>
