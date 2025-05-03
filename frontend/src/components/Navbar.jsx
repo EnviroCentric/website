@@ -118,11 +118,12 @@ export default function Navbar() {
                     <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-50">
                       {userMenuOptions
                         .filter(option => {
-                          if (option.name === "Access Management" || option.name === "Role Management" || option.name === "User Management") {
+                          if (option.name === "Access Management") {
+                            return isSuperuser;
+                          }
+                          if (option.name === "Role Management" || option.name === "User Management") {
                             return isSuperuser || user?.roles?.some(role =>
-                              role.permissions?.some(permission =>
-                                permission.name === 'manage_roles' || permission.name === 'manage_users'
-                              )
+                              role.permissions?.includes('manage_roles') || role.permissions?.includes('manage_users')
                             );
                           }
                           return true;

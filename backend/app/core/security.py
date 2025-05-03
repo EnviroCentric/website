@@ -1,13 +1,12 @@
 from datetime import datetime, timedelta
-from typing import Any, Union
+from typing import Any, Union, Dict
 from jose import jwt
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.session import get_db
-from app.models.user import User
+from app.db.queries.manager import query_manager
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login")
@@ -45,6 +44,20 @@ def create_refresh_token(
     return encoded_jwt
 
 
+def verify_refresh_token(token: str) -> str:
+    """Verify a refresh token and return the subject (email)."""
+    try:
+        payload = jwt.decode(
+            token, settings.JWT_REFRESH_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
+        )
+        email: str = payload.get("sub")
+        if email is None:
+            return None
+        return email
+    except jwt.JWTError:
+        return None
+
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
@@ -54,8 +67,8 @@ def get_password_hash(password: str) -> str:
 
 
 async def get_current_user(
-    db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)
-) -> User:
+    db = Depends(get_db), token: str = Depends(oauth2_scheme)
+) -> Dict:
     try:
         payload = jwt.decode(
             token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
@@ -71,15 +84,18 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
         )
-    user = db.query(User).filter(User.email == email).first()
+    
+    # Query user using the SQL query manager
+    user = await db.fetchrow(query_manager.get_user_by_email, email)
+    
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
         )
-    if not user.is_active:
+    if not user["is_active"]:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Inactive user",
         )
-    return user
+    return dict(user)

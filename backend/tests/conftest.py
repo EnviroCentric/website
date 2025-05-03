@@ -1,182 +1,147 @@
 import pytest
 import logging
-from httpx import AsyncClient
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
-from app.main import app
-from app.db.session import get_db
-from app.db.base_class import Base
-from app.core.security import create_access_token, get_password_hash
-from app.models.user import User
-from app.models.role import Role
+import asyncio
 import os
+from typing import AsyncGenerator, Generator
+from asyncpg import create_pool, Pool
+from fastapi.testclient import TestClient
+from httpx import AsyncClient, ASGITransport
+
+from app.main import app
+from app.core.config import settings
+from app.core.security import create_access_token, get_password_hash
+from app.schemas.user import UserCreate, UserResponse
+from app.services.users import UserService
+from app.db.session import get_db
 
 # Set test environment
 os.environ["TESTING"] = "True"
+os.environ["JWT_SECRET_KEY"] = "test-secret-key"
+os.environ["JWT_REFRESH_SECRET_KEY"] = "test-refresh-secret-key"
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-# Use a separate test database URL
-TEST_DATABASE_URL = "postgresql://temp:temp@db:5432/test_db"
+# Test database URL
+TEST_DATABASE_URL = settings.get_database_url
 
+@pytest.fixture(scope="session")
+def event_loop() -> Generator:
+    """Create an instance of the default event loop for each test case."""
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    yield loop
+    loop.close()
 
-@pytest.fixture(scope="function")
-async def db():
-    """Create a fresh database for each test."""
-    # Create test database
-    engine = create_engine(TEST_DATABASE_URL, pool_pre_ping=True)
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-    # Create test database if it doesn't exist
-    root_engine = create_engine("postgresql://temp:temp@db:5432/postgres")
-    with root_engine.connect() as conn:
-        # Terminate existing connections to test_db
-        conn.execute(
-            text(
-                """
-            SELECT pg_terminate_backend(pid)
-            FROM pg_stat_activity
-            WHERE datname = 'test_db'
-            AND pid <> pg_backend_pid()
-        """
+@pytest.fixture(scope="session")
+async def create_test_database():
+    """Create test database and tables."""
+    # Connect to default database to create test database
+    default_pool = await create_pool(
+        settings.get_database_url.replace("/test_db", "/postgres"),
+        command_timeout=60
+    )
+    
+    async with default_pool.acquire() as conn:
+        # Drop test database if it exists
+        await conn.execute("DROP DATABASE IF EXISTS test_db")
+        # Create test database
+        await conn.execute("CREATE DATABASE test_db")
+    
+    await default_pool.close()
+    
+    # Create tables in test database
+    test_pool = await create_pool(TEST_DATABASE_URL, command_timeout=60)
+    async with test_pool.acquire() as conn:
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                email VARCHAR(255) UNIQUE NOT NULL,
+                hashed_password VARCHAR(255) NOT NULL,
+                first_name VARCHAR(255) NOT NULL,
+                last_name VARCHAR(255) NOT NULL,
+                is_active BOOLEAN DEFAULT TRUE,
+                is_superuser BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             )
-        )
-        conn.execute(text("COMMIT"))
+        """)
+    
+    yield
+    
+    # Cleanup after tests
+    async with test_pool.acquire() as conn:
+        await conn.execute("DROP TABLE IF EXISTS users")
+    
+    await test_pool.close()
 
-        logger.info("Creating test database...")
-        conn.execute(text("DROP DATABASE IF EXISTS test_db"))
-        conn.execute(text("COMMIT"))
-        conn.execute(text("CREATE DATABASE test_db"))
-    root_engine.dispose()
+@pytest.fixture
+async def db_pool(create_test_database) -> AsyncGenerator[Pool, None]:
+    """Create a fresh database pool for each test."""
+    pool = await create_pool(TEST_DATABASE_URL, command_timeout=60)
+    yield pool
+    # Clean up the users table after each test
+    async with pool.acquire() as conn:
+        await conn.execute("TRUNCATE TABLE users RESTART IDENTITY CASCADE")
+    await pool.close()
 
-    # Create all tables
-    Base.metadata.create_all(bind=engine)
-
-    # Create session
-    connection = engine.connect()
-    transaction = connection.begin()
-    session = TestingSessionLocal(bind=connection)
-
-    yield session
-
-    # Cleanup
-    session.close()
-    transaction.rollback()
-    connection.close()
-    engine.dispose()
-
-    # Drop test database
-    with root_engine.connect() as conn:
-        conn.execute(text("COMMIT"))
-        conn.execute(text("DROP DATABASE IF EXISTS test_db"))
-    root_engine.dispose()
-
-
-@pytest.fixture(scope="function")
-async def client(db):
-    """Create a test client using the test database."""
-
-    async def override_get_db():
-        try:
-            yield db
-        finally:
-            pass
-
-    app.dependency_overrides[get_db] = override_get_db
-    async with AsyncClient(app=app, base_url="http://test") as ac:
-        yield ac
+@pytest.fixture
+async def client(db_pool) -> AsyncGenerator[AsyncClient, None]:
+    """Create a test client with a fresh database pool."""
+    async def get_pool():
+        yield db_pool
+    
+    app.dependency_overrides[get_db] = get_pool
+    
+    # Create a test client that connects to the test server
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        follow_redirects=True,
+        timeout=30.0
+    ) as client:
+        yield client
+    
     app.dependency_overrides.clear()
 
-
-@pytest.fixture(scope="function")
-async def superuser_token_headers(db):
-    """Create a superuser and return their auth headers."""
-    # Create a superuser role if it doesn't exist
-    superuser_role = db.query(Role).filter(Role.name == "admin").first()
-    if not superuser_role:
-        superuser_role = Role(name="admin")
-        db.add(superuser_role)
-        db.commit()
-
-    # Create a superuser
-    user = User(
-        email="superuser@example.com",
-        hashed_password="$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",  # "password"
-        first_name="Super",
-        last_name="User",
-        is_superuser=True,
-    )
-    user.roles.append(superuser_role)
-    db.add(user)
-    db.commit()
-
-    # Create access token
-    access_token = create_access_token(subject=user.email)
-    return {"Authorization": f"Bearer {access_token}"}
-
-
-@pytest.fixture(scope="function")
-async def normal_user_token_headers(db):
-    """Create a normal user and return their auth headers."""
-    # Create a user role if it doesn't exist
-    user_role = db.query(Role).filter(Role.name == "user").first()
-    if not user_role:
-        user_role = Role(name="user")
-        db.add(user_role)
-        db.commit()
-
-    # Create a normal user
-    user = User(
-        email="user@example.com",
-        hashed_password="$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",  # "password"
-        first_name="Normal",
-        last_name="User",
-        is_superuser=False,
-    )
-    user.roles.append(user_role)
-    db.add(user)
-    db.commit()
-
-    # Create access token
-    access_token = create_access_token(subject=user.email)
-    return {"Authorization": f"Bearer {access_token}"}
-
-
-@pytest.fixture(scope="function")
-async def test_user(db):
+@pytest.fixture
+async def test_user(db_pool) -> dict:
     """Create a test user."""
-    user = User(
+    user_service = UserService(db_pool)
+    user_data = UserCreate(
         email="test@example.com",
-        hashed_password=get_password_hash("testpass123"),
+        password="TestPass123!@#",
         first_name="Test",
         last_name="User",
-        is_superuser=False,
+        is_active=True,
+        is_superuser=False
     )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    user = await user_service.create_user(user_data)
     return user
 
+@pytest.fixture
+async def normal_user_token_headers(client: AsyncClient, test_user: dict):
+    """Create a test user and return its token headers."""
+    login_data = {
+        "username": test_user["email"],
+        "password": "TestPass123!@#"
+    }
+    response = await client.post("/api/v1/auth/login", data=login_data)
+    tokens = response.json()
+    return {"Authorization": f"Bearer {tokens['access_token']}"}
 
-@pytest.fixture(scope="function")
-async def test_superuser(db):
-    """Create a test superuser."""
-    superuser = User(
-        email="testsuper@example.com",
-        hashed_password=get_password_hash("testpass123"),
-        first_name="Test",
-        last_name="Superuser",
-        is_superuser=True,
+@pytest.fixture
+async def superuser_token_headers(db_pool) -> dict:
+    """Create a superuser and return their auth headers."""
+    user_service = UserService(db_pool)
+    user_in = UserCreate(
+        email="superuser@example.com",
+        password="TestPass123!@#",
+        first_name="Super",
+        last_name="User",
+        is_active=True,
+        is_superuser=True
     )
-    db.add(superuser)
-    db.commit()
-    db.refresh(superuser)
-    return superuser
-
-
-@pytest.fixture(scope="function")
-async def test_db(db):
-    """Alias for db fixture to maintain compatibility with existing tests."""
-    return db
+    user = await user_service.create_user(user_in)
+    access_token = create_access_token(subject=user["email"])
+    return {"Authorization": f"Bearer {access_token}"}

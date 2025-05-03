@@ -110,6 +110,25 @@ export default function Register({ isOpen, onClose, onSwitchToLogin }) {
     try {
       const response = await api.post('/auth/register', formData);
       if (response.data) {
+        // Reset form data
+        setFormData({
+          email: '',
+          password: '',
+          password_confirm: '',
+          first_name: '',
+          last_name: '',
+        });
+        // Reset password requirements
+        setPasswordRequirements({
+          hasMinLength: false,
+          hasUpperCase: false,
+          hasLowerCase: false,
+          hasNumber: false,
+          hasSpecialChar: false,
+          passwordsMatch: false,
+        });
+        // Reset email error
+        setEmailError('');
         onSwitchToLogin('Account created successfully! Please login with your credentials.');
         onClose();
       }

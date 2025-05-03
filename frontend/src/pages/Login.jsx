@@ -23,6 +23,19 @@ export default function Login({ isOpen, onClose, onSwitchToRegister, successMess
   const location = useLocation();
   const from = location.state?.from?.pathname || '/dashboard';
 
+  // Clear form data when modal is closed
+  useEffect(() => {
+    if (!isOpen) {
+      setFormData({
+        email: '',
+        password: '',
+      });
+      setError('');
+      setEmailError('');
+      setShowPassword(false);
+    }
+  }, [isOpen]);
+
   useEffect(() => {
     if (isOpen) {
       localStorage.setItem('loginFormData', JSON.stringify(formData));

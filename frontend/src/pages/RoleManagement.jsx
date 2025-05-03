@@ -27,7 +27,7 @@ export default function RoleManagement() {
       }
 
       const hasPermission = user?.is_superuser || user?.roles?.some(role =>
-        role.permissions?.some(permission => permission.name === 'manage_roles')
+        role.permissions?.includes('manage_roles')
       );
       setHasAccess(hasPermission);
 
@@ -204,12 +204,12 @@ export default function RoleManagement() {
                       </td>
                       <td className="px-3 sm:px-6 py-4 text-sm font-medium">
                         <div className="flex flex-col sm:flex-row sm:space-x-3 space-y-2 sm:space-y-0">
-                          <div className="flex space-x-2 sm:space-x-3">
+                          <div className="flex space-x-4">
                             <button
                               onClick={() => {
                                 setSelectedRole(role);
                                 setNewRoleName(role.name);
-                                setNewRoleDescription(role.description || '');
+                                setNewRoleDescription(role.description);
                                 setShowEditModal(true);
                               }}
                               className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300"
@@ -228,12 +228,14 @@ export default function RoleManagement() {
                               </button>
                             )}
                           </div>
-                          <button
-                            onClick={() => navigate(`/access-management?role=${role.role_id}`)}
-                            className="text-green-600 dark:text-green-400 hover:text-green-900 dark:hover:text-green-300"
-                          >
-                            Manage Permissions
-                          </button>
+                          {user?.is_superuser && (
+                            <button
+                              onClick={() => navigate(`/access-management?role=${role.role_id}`)}
+                              className="text-green-600 dark:text-green-400 hover:text-green-900 dark:hover:text-green-300"
+                            >
+                              Manage Permissions
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

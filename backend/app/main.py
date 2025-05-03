@@ -1,30 +1,22 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
+import logging
 from app.core.config import settings
 from app.api.v1.api import api_router
-from app.core.init_db import init_permissions
-from app.db.session import SessionLocal
+from app.startup import startup
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Initialize database with core permissions on startup."""
-    db = SessionLocal()
-    try:
-        init_permissions(db)
-    finally:
-        db.close()
-    yield
-
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    version=settings.VERSION,
     description=settings.DESCRIPTION,
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
-    lifespan=lifespan,
+    version=settings.VERSION,
+    openapi_url=f"{settings.API_V1_STR}/openapi.json"
 )
 
 # Set up CORS middleware
@@ -37,4 +29,13 @@ app.add_middleware(
 )
 
 # Include API router
-app.include_router(api_router, prefix="/api/v1")
+app.include_router(api_router, prefix=settings.API_V1_STR)
+
+@app.on_event("startup")
+async def startup_event():
+    """Run startup tasks when the application starts."""
+    await startup()
+
+@app.get("/")
+async def root():
+    return {"message": "Welcome to the API"}

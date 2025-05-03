@@ -16,8 +16,15 @@ class RoleUpdate(RoleBase):
     permissions: Optional[List[str]] = None
 
 
-class RoleResponse(RoleBase):
+class RoleInDB(RoleBase):
     role_id: int
+    role_order: int
+
+    class Config:
+        from_attributes = True
+
+
+class RoleResponse(RoleInDB):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -26,3 +33,12 @@ class RoleResponse(RoleBase):
 
 class RolePermissionUpdate(BaseModel):
     permissions: List[str]
+
+
+class RoleOrder(BaseModel):
+    role_id: int
+    role_order: int
+
+
+class RoleReorder(BaseModel):
+    role_orders: List[RoleOrder]

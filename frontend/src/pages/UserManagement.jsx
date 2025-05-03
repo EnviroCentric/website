@@ -33,7 +33,7 @@ export default function UserManagement() {
     const checkAccess = () => {
       if (currentUser?.is_superuser) return true;
       return currentUser?.roles?.some(role =>
-        role.permissions?.some(permission => permission.name === 'manage_users')
+        role.permissions?.includes('manage_users')
       );
     };
 
@@ -66,14 +66,31 @@ export default function UserManagement() {
       });
       if (!usersRes.ok) throw new Error('Failed to fetch users');
       const usersData = await usersRes.json();
-      setUsers(usersData);
+
+      // Create default admin role if it doesn't exist
+      const defaultAdminRole = {
+        id: 'admin',
+        name: 'Admin',
+        description: 'Administrator role'
+      };
+
+      // Add admin role to superusers
+      const adminRole = roles.find(r => r.name.toLowerCase() === 'admin') || defaultAdminRole;
+      const usersWithAdminRole = usersData.map(user => ({
+        ...user,
+        roles: user.is_superuser 
+          ? [...user.roles, adminRole]
+          : user.roles
+      }));
+      setUsers(usersWithAdminRole);
+
       lastFetchTime.current = now;
     } catch (err) {
       setError(err.message);
     } finally {
       fetchInProgress.current = false;
     }
-  }, [token, fetchRoles, users.length]);
+  }, [token, fetchRoles, users.length, roles]);
 
   const handleEditUser = async () => {
     try {
@@ -101,13 +118,21 @@ export default function UserManagement() {
         if (!rolesRes.ok) throw new Error('Failed to update user roles');
       }
 
-      // Update local state
-      const updatedRoles = roles.filter(r => editedUser.roles.includes(r.id));
+      // Update local state with the new roles
+      const updatedRoles = roles.filter(r => editedUser.roles.includes(r.id || r.role_id));
+      
+      // Create a new user object with the updated roles
+      const updatedUser = {
+        ...selectedUser,
+        is_active: editedUser.is_active,
+        roles: updatedRoles
+      };
+      
+      // Update the users state with the new user data
       const updatedUsers = users.map(u =>
-        u.id === selectedUser.id
-          ? { ...u, is_active: editedUser.is_active, roles: updatedRoles }
-          : u
+        u.id === selectedUser.id ? updatedUser : u
       );
+      
       setUsers(updatedUsers);
 
       // If the edited user is the current user, refresh user data
@@ -142,6 +167,21 @@ export default function UserManagement() {
 
   const formatUserName = (user) => {
     return `${user.first_name} ${user.last_name}`.trim() || 'Unnamed User';
+  };
+
+  // Update the role selection handler
+  const handleRoleChange = (role, checked) => {
+    const roleId = role?.id || role?.role_id;
+    if (!roleId) return; // Skip if no valid role ID
+
+    const newRoles = checked
+      ? [...editedUser.roles, roleId]
+      : editedUser.roles.filter(id => id !== roleId);
+    
+    setEditedUser(prev => ({
+      ...prev,
+      roles: newRoles
+    }));
   };
 
   if (isLoading) {
@@ -223,12 +263,12 @@ export default function UserManagement() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex flex-wrap gap-1">
-                          {user.roles.map((role) => (
+                          {user.roles.map((role, index) => (
                             <span
-                              key={role.id}
+                              key={`user-${user.id}-role-${role?.id || role?.role_id || index}`}
                               className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
                             >
-                              {(role.name || 'Unnamed Role').split(' ')
+                              {(role?.name || 'Unnamed Role').split(' ')
                                 .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
                                 .join(' ')}
                             </span>
@@ -367,37 +407,24 @@ export default function UserManagement() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {roles.map((role, index) => (
                       <label
-                        key={role?.role_id ? `role-${role.role_id}` : `role-${index}`}
+                        key={`edit-role-${role?.id || role?.role_id || index}`}
                         className="relative flex items-start p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600/50 cursor-pointer transition-colors"
                       >
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center">
                             <input
                               type="checkbox"
-                              checked={editedUser.roles.includes(role.role_id)}
-                              onChange={(e) => {
-                                console.log('Current roles:', editedUser.roles);
-                                console.log('Role being toggled:', role);
-                                
-                                const newRoles = e.target.checked
-                                  ? [...editedUser.roles, role.role_id]
-                                  : editedUser.roles.filter(id => id !== role.role_id);
-                                
-                                console.log('New roles:', newRoles);
-                                setEditedUser(prev => ({
-                                  ...prev,
-                                  roles: newRoles
-                                }));
-                              }}
+                              checked={editedUser.roles.includes(role?.id || role?.role_id)}
+                              onChange={(e) => handleRoleChange(role, e.target.checked)}
                               className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600"
                             />
                             <span className="ml-3 text-sm font-medium text-gray-900 dark:text-white">
-                              {(role.name || 'Unnamed Role').split(' ')
+                              {(role?.name || 'Unnamed Role').split(' ')
                                 .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
                                 .join(' ')}
                             </span>
                           </div>
-                          {role.description && (
+                          {role?.description && (
                             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                               {role.description.charAt(0).toUpperCase() + role.description.slice(1)}
                             </p>
@@ -480,18 +507,24 @@ export default function UserManagement() {
                     <div>
                       <span className="text-sm text-gray-600 dark:text-gray-400">Selected Roles</span>
                       <div className="mt-2 flex flex-wrap gap-2">
-                        {roles
-                          .filter(role => editedUser.roles.includes(role.role_id))
-                          .map(role => (
-                            <span
-                              key={role.role_id}
-                              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-                            >
-                              {role.name.split(' ')
-                                .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-                                .join(' ')}
-                            </span>
-                          ))}
+                        {editedUser.roles.length > 0 ? (
+                          roles
+                            .filter(role => editedUser.roles.includes(role?.id || role?.role_id))
+                            .map((role, index) => (
+                              <span
+                                key={`selected-role-${role?.id || role?.role_id || index}`}
+                                className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                              >
+                                {(role?.name || 'Unnamed Role').split(' ')
+                                  .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                                  .join(' ')}
+                              </span>
+                            ))
+                        ) : (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                            No Roles
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -519,47 +552,6 @@ export default function UserManagement() {
           </div>
         </div>
       )}
-
-      {/* Delete Modal */}
-      {showDeleteModal && (
-        <div 
-          className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center p-4"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setShowDeleteModal(false);
-              setSelectedUser(null);
-            }
-          }}
-        >
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md">
-            <div className="p-6">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-                Delete User
-              </h2>
-              <p className="text-gray-700 dark:text-gray-300">
-                Are you sure you want to delete {formatUserName(selectedUser)}? This action cannot be undone.
-              </p>
-              <div className="mt-6 flex justify-end space-x-3">
-                <button
-                  onClick={() => {
-                    setShowDeleteModal(false);
-                    setSelectedUser(null);
-                  }}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleDeleteUser}
-                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
-} 
+}

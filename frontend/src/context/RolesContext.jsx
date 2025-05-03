@@ -1,12 +1,13 @@
 import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
+import api from '../services/api';
 
 const RolesContext = createContext();
 
 export function RolesProvider({ children }) {
   const { token } = useAuth();
   const [roles, setRoles] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const fetchInProgress = useRef(false);
   const lastFetchTime = useRef(0);
@@ -22,26 +23,37 @@ export function RolesProvider({ children }) {
       return; // Prevent concurrent fetches
     }
 
+    if (!token) return;
+    
+    setLoading(true);
+    setError(null);
     try {
       fetchInProgress.current = true;
-      setIsLoading(true);
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/roles/`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const response = await api.get('/roles/', {
+        headers: { Authorization: `Bearer ${token}` }
       });
-
-      if (!response.ok) throw new Error('Failed to fetch roles');
-      const data = await response.json();
+      const data = response.data;
       // Filter out the admin role
       const filteredRoles = data.filter(role => role.name.toLowerCase() !== 'admin');
       setRoles(filteredRoles);
       lastFetchTime.current = now;
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.detail || 'Failed to fetch roles');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
       fetchInProgress.current = false;
     }
   }, [token, roles.length]);
+
+  const reorderRoles = async (roleOrders) => {
+    try {
+      const response = await api.put('/roles/reorder', { role_orders: roleOrders });
+      return response.data;
+    } catch (error) {
+      console.error('Error reordering roles:', error);
+      throw error;
+    }
+  };
 
   const addRole = useCallback((newRole) => {
     setRoles(prevRoles => [...prevRoles, newRole]);
@@ -70,9 +82,10 @@ export function RolesProvider({ children }) {
 
   const value = {
     roles,
-    isLoading,
+    loading,
     error,
     fetchRoles,
+    reorderRoles,
     addRole,
     updateRole,
     deleteRole,

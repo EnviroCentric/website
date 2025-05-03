@@ -1,6 +1,7 @@
 from typing import Optional, List
 from datetime import datetime
-from pydantic import BaseModel, EmailStr, ConfigDict, field_validator
+from pydantic import BaseModel, EmailStr, ConfigDict, field_validator, constr
+from app.core.validators import validate_password
 
 
 class UserBase(BaseModel):
@@ -21,9 +22,18 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     email: EmailStr
-    password: str
+    password: constr(min_length=8)
     first_name: str
     last_name: str
+
+    @field_validator("password")
+    def validate_password_strength(cls, v):
+        if not validate_password(v):
+            raise ValueError(
+                "Password must be at least 8 characters long and contain uppercase, "
+                "lowercase, numbers and special characters"
+            )
+        return v
 
 
 class UserUpdate(UserBase):
@@ -32,13 +42,23 @@ class UserUpdate(UserBase):
 
 class PasswordUpdate(BaseModel):
     current_password: str
-    new_password: str
+    new_password: constr(min_length=8)
+
+    @field_validator("new_password")
+    def validate_password_strength(cls, v):
+        if not validate_password(v):
+            raise ValueError(
+                "Password must be at least 8 characters long and contain uppercase, "
+                "lowercase, numbers and special characters"
+            )
+        return v
 
 
 class RoleResponse(BaseModel):
     id: int
     name: str
     description: Optional[str] = None
+    permissions: List[str] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -48,6 +68,7 @@ class UserResponse(UserBase):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     roles: List[RoleResponse] = []
+    is_superuser: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -55,3 +76,15 @@ class UserResponse(UserBase):
 class DeleteUserResponse(BaseModel):
     message: str
     user_id: int
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+
+class UserWithTokens(UserResponse):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
