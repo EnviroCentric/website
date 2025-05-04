@@ -65,7 +65,7 @@ async def test_register_existing_user(client: AsyncClient, test_user: dict):
     response = await client.post(
         "/api/v1/auth/register",
         json={
-            "email": test_user["email"],
+            "email": test_user.email,
             "password": "TestPass123!@#",
             "password_confirm": "TestPass123!@#",
             "first_name": "New",
@@ -82,7 +82,7 @@ async def test_login_success(client: AsyncClient, test_user: dict):
     response = await client.post(
         "/api/v1/auth/login",
         data={
-            "username": test_user["email"],
+            "username": test_user.email,
             "password": "TestPass123!@#"
         }
     )
@@ -101,14 +101,14 @@ async def test_login_invalid_email(client: AsyncClient):
             "password": "TestPass123!@#"
         }
     )
-    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+    assert response.status_code == status.HTTP_404_NOT_FOUND
 
 async def test_login_invalid_password(client: AsyncClient, test_user: dict):
     """Test login with invalid password."""
     response = await client.post(
         "/api/v1/auth/login",
         data={
-            "username": test_user["email"],
+            "username": test_user.email,
             "password": "WrongPassword123!@#"
         }
     )
@@ -154,7 +154,7 @@ async def test_refresh_token(client: AsyncClient, test_user: dict):
     login_response = await client.post(
         "/api/v1/auth/login",
         data={
-            "username": test_user["email"],
+            "username": test_user.email,
             "password": "TestPass123!@#"
         }
     )

@@ -88,3 +88,13 @@ class UserWithTokens(UserResponse):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
+
+
+class UserInDB(BaseModel):
+    id: int
+    email: str
+    hashed_password: str
+    first_name: str
+    last_name: str
+    is_active: bool
+    is_superuser: bool

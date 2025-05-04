@@ -39,3 +39,5 @@ async def startup_event():
 @app.get("/")
 async def root():
     return {"message": "Welcome to the API"}
+
+logging.getLogger("passlib.handlers.bcrypt").setLevel(logging.ERROR)

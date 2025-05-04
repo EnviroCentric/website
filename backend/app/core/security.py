@@ -13,7 +13,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login
 
 
 def create_access_token(
-    subject: Union[str, Any], expires_delta: timedelta = None
+    subject: Union[str, Any], expires_delta: timedelta = None, additional_claims: Dict = None
 ) -> str:
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
@@ -22,6 +22,8 @@ def create_access_token(
             minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
         )
     to_encode = {"exp": expire, "sub": str(subject)}
+    if additional_claims:
+        to_encode.update(additional_claims)
     encoded_jwt = jwt.encode(
         to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM
     )
@@ -98,4 +100,12 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Inactive user",
         )
-    return dict(user)
+    
+    # Convert user to dict and add any additional claims from the token
+    user_dict = dict(user)
+    if "is_superuser" in payload:
+        user_dict["is_superuser"] = payload["is_superuser"]
+    if "roles" in payload:
+        user_dict["roles"] = payload["roles"]
+    
+    return user_dict

@@ -53,6 +53,7 @@ async def create_test_database():
     # Create tables in test database
     test_pool = await create_pool(TEST_DATABASE_URL, command_timeout=60)
     async with test_pool.acquire() as conn:
+        # Create users table
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
@@ -66,11 +67,35 @@ async def create_test_database():
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        
+        # Create roles table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS roles (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) UNIQUE NOT NULL,
+                description TEXT,
+                permissions TEXT[] DEFAULT '{}',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Create user_roles table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS user_roles (
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                role_id INTEGER REFERENCES roles(id) ON DELETE CASCADE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, role_id)
+            )
+        """)
     
     yield
     
     # Cleanup after tests
     async with test_pool.acquire() as conn:
+        await conn.execute("DROP TABLE IF EXISTS user_roles")
+        await conn.execute("DROP TABLE IF EXISTS roles")
         await conn.execute("DROP TABLE IF EXISTS users")
     
     await test_pool.close()
@@ -80,8 +105,10 @@ async def db_pool(create_test_database) -> AsyncGenerator[Pool, None]:
     """Create a fresh database pool for each test."""
     pool = await create_pool(TEST_DATABASE_URL, command_timeout=60)
     yield pool
-    # Clean up the users table after each test
+    # Clean up the tables after each test
     async with pool.acquire() as conn:
+        await conn.execute("TRUNCATE TABLE user_roles RESTART IDENTITY CASCADE")
+        await conn.execute("TRUNCATE TABLE roles RESTART IDENTITY CASCADE")
         await conn.execute("TRUNCATE TABLE users RESTART IDENTITY CASCADE")
     await pool.close()
 
@@ -105,7 +132,7 @@ async def client(db_pool) -> AsyncGenerator[AsyncClient, None]:
     app.dependency_overrides.clear()
 
 @pytest.fixture
-async def test_user(db_pool) -> dict:
+async def test_user(db_pool) -> UserResponse:
     """Create a test user."""
     user_service = UserService(db_pool)
     user_data = UserCreate(
@@ -120,10 +147,10 @@ async def test_user(db_pool) -> dict:
     return user
 
 @pytest.fixture
-async def normal_user_token_headers(client: AsyncClient, test_user: dict):
+async def normal_user_token_headers(client: AsyncClient, test_user: UserResponse):
     """Create a test user and return its token headers."""
     login_data = {
-        "username": test_user["email"],
+        "username": test_user.email,
         "password": "TestPass123!@#"
     }
     response = await client.post("/api/v1/auth/login", data=login_data)
@@ -142,6 +169,55 @@ async def superuser_token_headers(db_pool) -> dict:
         is_active=True,
         is_superuser=True
     )
-    user = await user_service.create_user(user_in)
-    access_token = create_access_token(subject=user["email"])
+    user = await user_service.create_superuser(user_in)
+    access_token = create_access_token(
+        subject=user.email,
+        additional_claims={"is_superuser": True}
+    )
+    return {"Authorization": f"Bearer {access_token}"}
+
+@pytest.fixture
+async def admin_token_headers(db_pool):
+    """Create headers with an admin user token (has manage_users permission)."""
+    user_service = UserService(db_pool)
+    user_data = UserCreate(
+        email="admin@example.com",
+        password="AdminPass123!@#",
+        first_name="Admin",
+        last_name="User",
+        is_active=True,
+        is_superuser=False
+    )
+    user = await user_service.create_user(user_data)
+    
+    # Add admin role with manage_users permission
+    async with db_pool.acquire() as conn:
+        # Create admin role if it doesn't exist
+        admin_role = await conn.fetchrow("""
+            INSERT INTO roles (name, description, permissions)
+            VALUES ('admin', 'Administrator role', ARRAY['manage_users'])
+            ON CONFLICT (name) DO UPDATE
+            SET permissions = ARRAY['manage_users']
+            RETURNING id, name, permissions
+        """)
+        
+        # Assign admin role to user
+        await conn.execute("""
+            INSERT INTO user_roles (user_id, role_id)
+            VALUES ($1, $2)
+            ON CONFLICT (user_id, role_id) DO NOTHING
+        """, user.id, admin_role['id'])
+    
+    # Create token with user data including roles
+    access_token = create_access_token(
+        subject=user.email,
+        additional_claims={
+            "is_superuser": False,
+            "roles": [{
+                "id": admin_role['id'],
+                "name": admin_role['name'],
+                "permissions": admin_role['permissions']
+            }]
+        }
+    )
     return {"Authorization": f"Bearer {access_token}"}

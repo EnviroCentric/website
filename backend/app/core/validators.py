@@ -1,4 +1,5 @@
 import re
+from typing import Optional
 
 def validate_password(password: str) -> bool:
     """
@@ -26,3 +27,25 @@ def validate_password(password: str) -> bool:
         return False
         
     return True 
+
+def validate_email(email: str) -> tuple[bool, Optional[str]]:
+    """
+    Validate email format and return (is_valid, error_message).
+    Returns (True, None) if valid, (False, error_message) if invalid.
+    """
+    # Basic email format validation
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.match(email_pattern, email):
+        return False, "Invalid email format"
+    
+    # Check for common disposable email domains
+    disposable_domains = {
+        'tempmail.com', 'throwawaymail.com', 'mailinator.com',
+        'guerrillamail.com', 'sharklasers.com', 'yopmail.com',
+        'temp-mail.org', 'fakeinbox.com', 'temp-mail.io'
+    }
+    domain = email.split('@')[1].lower()
+    if domain in disposable_domains:
+        return False, "Disposable email addresses are not allowed"
+    
+    return True, None 

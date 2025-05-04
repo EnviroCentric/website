@@ -1,16 +1,21 @@
 -- name: get_user_by_email
+SELECT id, email, hashed_password, first_name, last_name, is_active, is_superuser
+FROM users
+WHERE email = $1;
+
+-- name: get_all_users
 SELECT 
-    id, 
-    email, 
-    hashed_password, 
+    id,
+    email,
+    hashed_password,
     first_name,
     last_name,
-    is_active, 
-    is_superuser, 
-    created_at, 
+    is_active,
+    is_superuser,
+    created_at,
     updated_at
-FROM users 
-WHERE email = $1;
+FROM users
+ORDER BY created_at DESC;
 
 -- name: get_user_by_id
 SELECT 

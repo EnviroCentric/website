@@ -21,12 +21,15 @@ async def test_create_user(db_pool: asyncpg.Pool):
     user = await service.create_user(user_data)
     
     assert user is not None
-    assert user["email"] == user_data.email
-    assert user["first_name"] == user_data.first_name
-    assert user["last_name"] == user_data.last_name
-    assert user["is_active"] == user_data.is_active
-    assert user["is_superuser"] == user_data.is_superuser
-    assert verify_password(user_data.password, user["hashed_password"])
+    assert user.email == user_data.email
+    assert user.first_name == user_data.first_name
+    assert user.last_name == user_data.last_name
+    assert user.is_active == user_data.is_active
+    assert user.is_superuser == user_data.is_superuser
+    # Fetch the user from the DB to check the hashed password
+    user_in_db = await service.get_user_by_email(user_data.email)
+    assert user_in_db is not None
+    assert verify_password(user_data.password, user_in_db.hashed_password)
 
 async def test_get_user_by_id(db_pool: asyncpg.Pool):
     """Test getting a user by ID."""
@@ -44,13 +47,13 @@ async def test_get_user_by_id(db_pool: asyncpg.Pool):
     created_user = await service.create_user(user_data)
     
     # Then try to get the user
-    retrieved_user = await service.get_user_by_id(created_user["id"])
+    retrieved_user = await service.get_user_by_id(created_user.id)
     
     assert retrieved_user is not None
-    assert retrieved_user["id"] == created_user["id"]
-    assert retrieved_user["email"] == created_user["email"]
-    assert retrieved_user["first_name"] == created_user["first_name"]
-    assert retrieved_user["last_name"] == created_user["last_name"]
+    assert retrieved_user.id == created_user.id
+    assert retrieved_user.email == created_user.email
+    assert retrieved_user.first_name == created_user.first_name
+    assert retrieved_user.last_name == created_user.last_name
 
 async def test_get_nonexistent_user(db_pool: asyncpg.Pool):
     """Test getting a user that doesn't exist."""

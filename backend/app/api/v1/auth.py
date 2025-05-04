@@ -4,8 +4,9 @@ from app.core.security import create_access_token, create_refresh_token, verify_
 from app.services.users import UserService
 from app.db.session import get_db
 import asyncpg
-from app.schemas.user import UserCreate, UserResponse, TokenResponse, UserWithTokens
+from app.schemas.user import UserCreate, UserResponse, TokenResponse, UserWithTokens, UserInDB
 from app.core.security import get_current_user
+from app.core.validators import validate_email
 from pydantic import BaseModel, field_validator
 
 router = APIRouter()
@@ -25,6 +26,14 @@ async def register(
     db: asyncpg.Pool = Depends(get_db)
 ):
     """Register a new user."""
+    # Validate email format
+    is_valid, error_message = validate_email(user_in.email)
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_message
+        )
+    
     user_service = UserService(db)
     
     # Check if user already exists
@@ -39,11 +48,11 @@ async def register(
     user = await user_service.create_user(user_in)
     
     # Generate tokens
-    access_token = create_access_token(subject=user["email"])
-    refresh_token = create_refresh_token(subject=user["email"])
+    access_token = create_access_token(subject=user.email)
+    refresh_token = create_refresh_token(subject=user.email)
     
     # Add tokens to response
-    response = user.copy()
+    response = user.model_dump()
     response["access_token"] = access_token
     response["refresh_token"] = refresh_token
     response["token_type"] = "bearer"
@@ -56,25 +65,41 @@ async def login(
     db: asyncpg.Pool = Depends(get_db)
 ):
     """Login endpoint."""
+    # Validate email format
+    is_valid, error_message = validate_email(form_data.username)
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_message
+        )
+    
     user_service = UserService(db)
     user = await user_service.get_user_by_email(form_data.username)
     
-    if not user or not verify_password(form_data.password, user["hashed_password"]):
+    # Check if user exists first
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Email not registered. Please create an account first."
+        )
+    
+    # Then check password
+    if not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+            detail="Incorrect password",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    if not user["is_active"]:
+    if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Inactive user"
         )
     
     return {
-        "access_token": create_access_token(subject=user["email"]),
-        "refresh_token": create_refresh_token(subject=user["email"]),
+        "access_token": create_access_token(subject=user.email),
+        "refresh_token": create_refresh_token(subject=user.email),
         "token_type": "bearer"
     }
 

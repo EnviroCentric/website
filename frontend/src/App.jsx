@@ -11,8 +11,6 @@ import ProfilePassword from './pages/ProfilePassword';
 import ProtectedRoute from './routes/ProtectedRoute';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import AccessManagement from './pages/AccessManagement';
-import RoleManagement from './pages/RoleManagement';
 import UserManagement from './pages/UserManagement';
 import { RolesProvider } from './context/RolesContext';
 import { PermissionsProvider } from './context/PermissionsContext';
@@ -62,22 +60,6 @@ function App() {
                   />
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />
-                  <Route
-                    path="/access-management"
-                    element={
-                      <ProtectedRoute>
-                        <AccessManagement />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/role-management"
-                    element={
-                      <ProtectedRoute>
-                        <RoleManagement />
-                      </ProtectedRoute>
-                    }
-                  />
                   <Route
                     path="/user-management"
                     element={

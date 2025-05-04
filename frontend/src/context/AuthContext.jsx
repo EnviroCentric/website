@@ -1,5 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { 
+  getAuthToken, 
+  isTokenExpired, 
+  login as loginService, 
+  register as registerService, 
+  getCurrentUser, 
+  logout as logoutService, 
+  refreshToken 
+} from '../services/auth';
 
 const AuthContext = createContext();
 
@@ -7,12 +16,13 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [token, setToken] = useState(getAuthToken());
   const navigate = useNavigate();
   const fetchInProgress = useRef(false);
   const lastFetchTime = useRef(0);
   const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes in milliseconds
 
-  const fetchUserData = async (token, force = false) => {
+  const fetchUserData = async (force = false) => {
     const now = Date.now();
     if (!force && user && now - lastFetchTime.current < CACHE_DURATION) {
       return; // Use cached data if it's still valid
@@ -24,25 +34,13 @@ export function AuthProvider({ children }) {
 
     try {
       fetchInProgress.current = true;
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/users/self`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch user data');
-      }
-
-      const userData = await response.json();
+      const userData = await getCurrentUser();
       setUser(userData);
       setIsAuthenticated(true);
       lastFetchTime.current = now;
     } catch (error) {
       console.error('Error fetching user data:', error);
-      localStorage.removeItem('access_token');
-      setUser(null);
-      setIsAuthenticated(false);
+      logout();
     } finally {
       setLoading(false);
       fetchInProgress.current = false;
@@ -50,43 +48,70 @@ export function AuthProvider({ children }) {
   };
 
   useEffect(() => {
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      fetchUserData(token);
+    const currentToken = getAuthToken();
+    if (currentToken && !isTokenExpired(currentToken)) {
+      setToken(currentToken);
+      fetchUserData();
+    } else if (currentToken) {
+      // Try to refresh the token
+      refreshToken()
+        .then(() => {
+          setToken(getAuthToken());
+          fetchUserData();
+        })
+        .catch(() => {
+          logout();
+          setLoading(false);
+        });
     } else {
       setIsAuthenticated(false);
       setLoading(false);
     }
   }, []);
 
-  const login = async (accessToken) => {
-    localStorage.setItem('access_token', accessToken);
-    await fetchUserData(accessToken, true); // Force fetch on login
+  const login = async (email, password) => {
+    try {
+      const response = await loginService(email, password);
+      setToken(getAuthToken());
+      await fetchUserData(true); // Force fetch on login
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const register = async (userData) => {
+    try {
+      const response = await registerService(userData);
+      setToken(getAuthToken());
+      await fetchUserData(true); // Force fetch after registration
+      return response;
+    } catch (error) {
+      throw error;
+    }
   };
 
   const logout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('loginFormData');
+    logoutService();
     setUser(null);
+    setToken(null);
     setIsAuthenticated(false);
     navigate('/');
   };
 
   const refreshUserData = async () => {
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      await fetchUserData(token, true); // Force refresh
-    }
+    await fetchUserData(true); // Force refresh
   };
 
   const value = {
     user,
+    setUser,
     isAuthenticated,
     loading,
+    token,
     login,
+    register,
     logout,
-    token: localStorage.getItem('access_token'),
-    setUser,
     refreshUserData
   };
 
