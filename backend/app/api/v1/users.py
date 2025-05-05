@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 import asyncpg
 from app.db.session import get_db
 from app.schemas.user import UserResponse, UserCreate, UserUpdate
@@ -8,9 +8,9 @@ from app.core.security import get_current_user
 from app.core.validators import validate_password
 from app.db.queries.manager import query_manager
 
-router = APIRouter()
+router = APIRouter(prefix="/users", tags=["users"])
 
-@router.get("/", response_model=List[UserResponse])
+@router.get("", response_model=List[UserResponse])
 async def get_users(
     current_user: dict = Depends(get_current_user),
     db: asyncpg.Pool = Depends(get_db)
@@ -88,7 +88,7 @@ async def get_user(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return user
 
-@router.post("/", response_model=UserResponse)
+@router.post("", response_model=UserResponse)
 async def create_user(
     user_in: UserCreate,
     current_user: UserResponse = Depends(get_current_user),
@@ -160,4 +160,58 @@ async def update_user(
         update_data.get('is_active'),
         update_data.get('is_superuser')
     )
-    return UserResponse(**dict(updated_user)) 
+    return UserResponse(**dict(updated_user))
+
+@router.put("/{user_id}/roles", status_code=200)
+async def assign_roles_to_user(
+    user_id: int,
+    role_ids: List[int] = Body(..., embed=True),
+    current_user: dict = Depends(get_current_user),
+    db: asyncpg.Pool = Depends(get_db)
+):
+    """Assign roles to a user."""
+    current_user_model = UserResponse(**current_user)
+    
+    # Check if user has permission to assign roles
+    if not (current_user_model.is_superuser or any(role.permissions and "manage_users" in role.permissions for role in current_user_model.roles)):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions to assign roles")
+    
+    # Verify user exists
+    user = await db.fetchrow(query_manager.get_user_by_id, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    
+    # Get current user's highest role level
+    current_user_highest_level = 0
+    if not current_user_model.is_superuser:
+        result = await db.fetchrow(
+            query_manager.get_user_highest_role_level,
+            current_user_model.id
+        )
+        current_user_highest_level = result['highest_level']
+    
+    # Verify all role_ids exist and check their levels
+    for role_id in role_ids:
+        role = await db.fetchrow(query_manager.get_role_by_id, role_id)
+        if not role:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Role with ID {role_id} not found"
+            )
+        
+        # Check if role level is higher than current user's highest level
+        if not current_user_model.is_superuser and role['level'] >= current_user_highest_level:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Cannot assign role '{role['name']}' as it has a higher or equal level to your highest role"
+            )
+    
+    async with db.acquire() as conn:
+        async with conn.transaction():
+            # Remove existing roles
+            await conn.execute(query_manager.delete_user_roles, user_id)
+            # Assign new roles
+            for role_id in role_ids:
+                await conn.execute(query_manager.insert_user_role, user_id, role_id)
+    
+    return {"message": "Roles updated"} 

@@ -1,7 +1,18 @@
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import datetime
 from pydantic import BaseModel, EmailStr, ConfigDict, field_validator, constr
 from app.core.validators import validate_password
+
+
+class RoleResponse(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    permissions: List[str] = []
+    level: Optional[int] = None
+    created_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserBase(BaseModel):
@@ -54,15 +65,6 @@ class PasswordUpdate(BaseModel):
         return v
 
 
-class RoleResponse(BaseModel):
-    id: int
-    name: str
-    description: Optional[str] = None
-    permissions: List[str] = []
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 class UserResponse(UserBase):
     id: int
     created_at: Optional[datetime] = None
@@ -71,6 +73,16 @@ class UserResponse(UserBase):
     is_superuser: bool = False
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("roles", mode="before")
+    def parse_roles(cls, v):
+        if isinstance(v, str):
+            try:
+                import json
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return []
+        return v or []
 
 
 class DeleteUserResponse(BaseModel):

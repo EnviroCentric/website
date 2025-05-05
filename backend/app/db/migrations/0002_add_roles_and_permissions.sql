@@ -35,4 +35,21 @@ FROM roles r
 CROSS JOIN permissions p
 WHERE r.name IN ('manager', 'supervisor')
 AND p.name = 'manage_users'
+ON CONFLICT DO NOTHING;
+
+-- Assign all permissions to admin role
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id
+FROM roles r
+CROSS JOIN permissions p
+WHERE r.name = 'admin'
+ON CONFLICT DO NOTHING;
+
+-- Assign admin role to existing superusers
+INSERT INTO user_roles (user_id, role_id)
+SELECT u.id, r.id
+FROM users u
+CROSS JOIN roles r
+WHERE u.is_superuser = true
+AND r.name = 'admin'
 ON CONFLICT DO NOTHING; 

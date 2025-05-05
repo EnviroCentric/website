@@ -24,6 +24,34 @@ export default function UserManagement() {
   const lastFetchTime = useRef(0);
   const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes in milliseconds
 
+  // Get user's highest role level
+  const getUserHighestRoleLevel = useCallback(() => {
+    if (currentUser?.is_superuser) return Infinity;
+    return Math.max(...(currentUser?.roles?.map(role => role.level || 0) || [0]));
+  }, [currentUser]);
+
+  // Check if user can edit another user based on role levels
+  const canEditUser = useCallback((targetUser) => {
+    if (currentUser?.is_superuser) return true;
+    if (targetUser.id === currentUser?.id) return true;
+    
+    const currentUserLevel = getUserHighestRoleLevel();
+    const targetUserHighestLevel = Math.max(...(targetUser?.roles?.map(role => role.level || 0) || [0]));
+    
+    return targetUserHighestLevel < currentUserLevel;
+  }, [currentUser, getUserHighestRoleLevel]);
+
+  // Filter roles that user can assign
+  const getAssignableRoles = useCallback(() => {
+    const userHighestLevel = getUserHighestRoleLevel();
+    // For admin users (level 100), show all roles except admin
+    if (userHighestLevel === 100) {
+      return roles.filter(role => role.name.toLowerCase() !== 'admin');
+    }
+    // For all other users, show any roles below their highest level
+    return roles.filter(role => role.level < userHighestLevel);
+  }, [roles, getUserHighestRoleLevel]);
+
   useEffect(() => {
     if (!isAuthenticated) {
       navigate('/');
@@ -40,7 +68,7 @@ export default function UserManagement() {
     const hasPermission = checkAccess();
     setHasAccess(hasPermission);
     if (hasPermission) {
-      fetchData();
+      fetchData(true); // Force refresh on mount
     } else {
       navigate('/');
     }
@@ -59,42 +87,33 @@ export default function UserManagement() {
 
     try {
       fetchInProgress.current = true;
-      await fetchRoles(force); // This will use the cached roles if available
+      setIsLoading(true);
+      await fetchRoles(true); // Force refresh roles
       
       const usersRes = await fetch(`${import.meta.env.VITE_API_URL}/users/`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!usersRes.ok) throw new Error('Failed to fetch users');
       const usersData = await usersRes.json();
-
-      // Create default admin role if it doesn't exist
-      const defaultAdminRole = {
-        id: 'admin',
-        name: 'Admin',
-        description: 'Administrator role'
-      };
-
-      // Add admin role to superusers
-      const adminRole = roles.find(r => r.name.toLowerCase() === 'admin') || defaultAdminRole;
-      const usersWithAdminRole = usersData.map(user => ({
-        ...user,
-        roles: user.is_superuser 
-          ? [...user.roles, adminRole]
-          : user.roles
-      }));
-      setUsers(usersWithAdminRole);
-
+      
+      setUsers(usersData);
       lastFetchTime.current = now;
     } catch (err) {
       setError(err.message);
     } finally {
       fetchInProgress.current = false;
+      setIsLoading(false);
     }
-  }, [token, fetchRoles, users.length, roles]);
+  }, [token, fetchRoles, users.length]);
+
+  // Add refresh handler
+  const handleRefresh = useCallback(() => {
+    fetchData(true);
+  }, [fetchData]);
 
   const handleEditUser = async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/users/${selectedUser.id}/`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/users/${selectedUser.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -107,7 +126,7 @@ export default function UserManagement() {
       if (!res.ok) throw new Error('Failed to update user');
 
       if (JSON.stringify(editedUser.roles) !== JSON.stringify(selectedUser.roles.map(r => r.id))) {
-        const rolesRes = await fetch(`${import.meta.env.VITE_API_URL}/users/${selectedUser.id}/roles/`, {
+        const rolesRes = await fetch(`${import.meta.env.VITE_API_URL}/users/${selectedUser.id}/roles`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -150,7 +169,7 @@ export default function UserManagement() {
 
   const handleDeleteUser = async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/users/${selectedUser.id}/`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/users/${selectedUser.id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -182,6 +201,63 @@ export default function UserManagement() {
       ...prev,
       roles: newRoles
     }));
+  };
+
+  // Render user roles
+  const renderUserRoles = (user) => {
+    if (!Array.isArray(user.roles)) {
+      return null;
+    }
+    return user.roles.map((role, index) => (
+      <span
+        key={`user-${user.id}-role-${role?.id || role?.role_id || index}`}
+        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+      >
+        {(role?.name || 'Unnamed Role').split(' ')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+          .join(' ')}
+      </span>
+    ));
+  };
+
+  // Update the role selection section in the edit modal
+  const renderRoleSelection = () => {
+    const assignableRoles = getAssignableRoles();
+    
+    return (
+      <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
+        <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-4">User Roles</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {assignableRoles.map((role, index) => (
+            <label
+              key={`edit-role-${role?.id || role?.role_id || index}`}
+              className="relative flex items-start p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600/50 cursor-pointer transition-colors"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={editedUser.roles.includes(role?.id || role?.role_id)}
+                    onChange={(e) => handleRoleChange(role, e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600"
+                  />
+                  <span className="ml-3 text-sm font-medium text-gray-900 dark:text-white">
+                    {(role?.name || 'Unnamed Role').split(' ')
+                      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                      .join(' ')}
+                  </span>
+                </div>
+                {role?.description && (
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {role.description.charAt(0).toUpperCase() + role.description.slice(1)}
+                  </p>
+                )}
+              </div>
+            </label>
+          ))}
+        </div>
+      </div>
+    );
   };
 
   if (isLoading) {
@@ -222,6 +298,15 @@ export default function UserManagement() {
                   Manage system users and their roles
                 </p>
               </div>
+              <button
+                onClick={handleRefresh}
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <svg className="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh
+              </button>
             </div>
           </div>
 
@@ -263,16 +348,7 @@ export default function UserManagement() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex flex-wrap gap-1">
-                          {user.roles.map((role, index) => (
-                            <span
-                              key={`user-${user.id}-role-${role?.id || role?.role_id || index}`}
-                              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-                            >
-                              {(role?.name || 'Unnamed Role').split(' ')
-                                .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-                                .join(' ')}
-                            </span>
-                          ))}
+                          {renderUserRoles(user)}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -287,7 +363,7 @@ export default function UserManagement() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        {user.id !== currentUser.id && (
+                        {user.id !== currentUser.id && canEditUser(user) && (
                           <button
                             onClick={() => {
                               setSelectedUser(user);
@@ -302,6 +378,11 @@ export default function UserManagement() {
                           >
                             Edit
                           </button>
+                        )}
+                        {user.id !== currentUser.id && !canEditUser(user) && (
+                          <span className="text-gray-400 dark:text-gray-500">
+                            Cannot edit
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -402,38 +483,7 @@ export default function UserManagement() {
                 </div>
 
                 {/* Roles Section */}
-                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
-                  <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-4">User Roles</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {roles.map((role, index) => (
-                      <label
-                        key={`edit-role-${role?.id || role?.role_id || index}`}
-                        className="relative flex items-start p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600/50 cursor-pointer transition-colors"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center">
-                            <input
-                              type="checkbox"
-                              checked={editedUser.roles.includes(role?.id || role?.role_id)}
-                              onChange={(e) => handleRoleChange(role, e.target.checked)}
-                              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600"
-                            />
-                            <span className="ml-3 text-sm font-medium text-gray-900 dark:text-white">
-                              {(role?.name || 'Unnamed Role').split(' ')
-                                .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-                                .join(' ')}
-                            </span>
-                          </div>
-                          {role?.description && (
-                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                              {role.description.charAt(0).toUpperCase() + role.description.slice(1)}
-                            </p>
-                          )}
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                </div>
+                {renderRoleSelection()}
               </div>
 
               {/* Action Buttons */}

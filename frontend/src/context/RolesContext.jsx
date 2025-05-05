@@ -33,11 +33,10 @@ export function RolesProvider({ children }) {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = response.data;
-      // Filter out the admin role
-      const filteredRoles = data.filter(role => role.name.toLowerCase() !== 'admin');
-      setRoles(filteredRoles);
+      setRoles(data);
       lastFetchTime.current = now;
     } catch (err) {
+      console.error('Error fetching roles:', err);
       setError(err.response?.data?.detail || 'Failed to fetch roles');
     } finally {
       setLoading(false);

@@ -264,4 +264,28 @@ async def test_create_user_with_long_password(client: AsyncClient, normal_user_t
         "is_superuser": False
     }
     response = await client.post("/api/v1/users/", json=user_data, headers=normal_user_token_headers)
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY 
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+async def test_assign_roles_success(client, admin_token_headers, test_user):
+    # Get all roles
+    resp = await client.get("/api/v1/roles/", headers=admin_token_headers)
+    assert resp.status_code == 200
+    roles = resp.json()
+    role_ids = [role["id"] for role in roles if role["name"] != "admin"]
+    # Assign manager and supervisor roles to test_user
+    resp = await client.put(f"/api/v1/users/{test_user.id}/roles", json={"role_ids": role_ids}, headers=admin_token_headers)
+    assert resp.status_code == 200
+    assert resp.json()["message"] == "Roles updated"
+
+async def test_assign_roles_forbidden(client, test_user, normal_user_token_headers):
+    # Try to assign roles as a normal user (should fail)
+    resp = await client.put(f"/api/v1/users/{test_user.id}/roles", json={"role_ids": [1]}, headers=normal_user_token_headers)
+    assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+async def test_assign_roles_invalid_input(client, admin_token_headers, test_user):
+    # Missing role_ids
+    resp = await client.put(f"/api/v1/users/{test_user.id}/roles", json={}, headers=admin_token_headers)
+    assert resp.status_code == 422
+    # Non-list role_ids
+    resp = await client.put(f"/api/v1/users/{test_user.id}/roles", json={"role_ids": "notalist"}, headers=admin_token_headers)
+    assert resp.status_code == 422 

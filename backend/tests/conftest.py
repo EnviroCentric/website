@@ -74,9 +74,28 @@ async def create_test_database():
                 id SERIAL PRIMARY KEY,
                 name VARCHAR(255) UNIQUE NOT NULL,
                 description TEXT,
-                permissions TEXT[] DEFAULT '{}',
+                level INTEGER NOT NULL DEFAULT 0,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Create permissions table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS permissions (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) UNIQUE NOT NULL,
+                description TEXT,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Create role_permissions table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS role_permissions (
+                role_id INTEGER REFERENCES roles(id) ON DELETE CASCADE,
+                permission_id INTEGER REFERENCES permissions(id) ON DELETE CASCADE,
+                PRIMARY KEY (role_id, permission_id)
             )
         """)
         
@@ -89,12 +108,67 @@ async def create_test_database():
                 PRIMARY KEY (user_id, role_id)
             )
         """)
+
+        # Create user_roles_with_permissions view
+        await conn.execute("""
+            CREATE OR REPLACE VIEW user_roles_with_permissions AS
+            SELECT 
+                ur.user_id,
+                r.id,
+                r.name,
+                r.description,
+                r.level,
+                r.created_at,
+                COALESCE(array_agg(p.name ORDER BY p.name) FILTER (WHERE p.name IS NOT NULL), '{}') AS permissions
+            FROM user_roles ur
+            JOIN roles r ON ur.role_id = r.id
+            LEFT JOIN role_permissions rp ON r.id = rp.role_id
+            LEFT JOIN permissions p ON rp.permission_id = p.id
+            GROUP BY ur.user_id, r.id, r.name, r.description, r.level, r.created_at
+        """)
+        
+        # Insert default roles
+        await conn.execute("""
+            INSERT INTO roles (name, description, level)
+            VALUES
+                ('admin', 'Administrator with full system access', 100),
+                ('manager', 'Manager with elevated access', 90),
+                ('supervisor', 'Supervisor with team management access', 80)
+            ON CONFLICT (name) DO UPDATE SET level = EXCLUDED.level
+        """)
+        
+        # Insert manage_users permission
+        await conn.execute("""
+            INSERT INTO permissions (name, description)
+            VALUES ('manage_users', 'Permission to manage user accounts and access')
+            ON CONFLICT (name) DO NOTHING
+        """)
+        
+        # Assign manage_users permission to manager and supervisor
+        await conn.execute("""
+            INSERT INTO role_permissions (role_id, permission_id)
+            SELECT r.id, p.id
+            FROM roles r, permissions p
+            WHERE r.name IN ('manager', 'supervisor') AND p.name = 'manage_users'
+            ON CONFLICT DO NOTHING
+        """)
+        # Assign all permissions to admin
+        await conn.execute("""
+            INSERT INTO role_permissions (role_id, permission_id)
+            SELECT r.id, p.id
+            FROM roles r, permissions p
+            WHERE r.name = 'admin'
+            ON CONFLICT DO NOTHING
+        """)
     
     yield
     
     # Cleanup after tests
     async with test_pool.acquire() as conn:
+        await conn.execute("DROP VIEW IF EXISTS user_roles_with_permissions")
+        await conn.execute("DROP TABLE IF EXISTS role_permissions")
         await conn.execute("DROP TABLE IF EXISTS user_roles")
+        await conn.execute("DROP TABLE IF EXISTS permissions")
         await conn.execute("DROP TABLE IF EXISTS roles")
         await conn.execute("DROP TABLE IF EXISTS users")
     
@@ -107,9 +181,59 @@ async def db_pool(create_test_database) -> AsyncGenerator[Pool, None]:
     yield pool
     # Clean up the tables after each test
     async with pool.acquire() as conn:
+        await conn.execute("DROP VIEW IF EXISTS user_roles_with_permissions")
         await conn.execute("TRUNCATE TABLE user_roles RESTART IDENTITY CASCADE")
+        await conn.execute("TRUNCATE TABLE role_permissions RESTART IDENTITY CASCADE")
+        await conn.execute("TRUNCATE TABLE permissions RESTART IDENTITY CASCADE")
         await conn.execute("TRUNCATE TABLE roles RESTART IDENTITY CASCADE")
         await conn.execute("TRUNCATE TABLE users RESTART IDENTITY CASCADE")
+        
+        # Re-create the view
+        await conn.execute("""
+            CREATE OR REPLACE VIEW user_roles_with_permissions AS
+            SELECT 
+                ur.user_id,
+                r.id,
+                r.name,
+                r.description,
+                r.level,
+                r.created_at,
+                COALESCE(array_agg(p.name ORDER BY p.name) FILTER (WHERE p.name IS NOT NULL), '{}') AS permissions
+            FROM user_roles ur
+            JOIN roles r ON ur.role_id = r.id
+            LEFT JOIN role_permissions rp ON r.id = rp.role_id
+            LEFT JOIN permissions p ON rp.permission_id = p.id
+            GROUP BY ur.user_id, r.id, r.name, r.description, r.level, r.created_at
+        """)
+        
+        # Re-insert default roles, permissions, and assignments after truncation
+        await conn.execute("""
+            INSERT INTO roles (name, description, level)
+            VALUES
+                ('admin', 'Administrator with full system access', 100),
+                ('manager', 'Manager with elevated access', 90),
+                ('supervisor', 'Supervisor with team management access', 80)
+            ON CONFLICT (name) DO UPDATE SET level = EXCLUDED.level
+        """)
+        await conn.execute("""
+            INSERT INTO permissions (name, description)
+            VALUES ('manage_users', 'Permission to manage user accounts and access')
+            ON CONFLICT (name) DO NOTHING
+        """)
+        await conn.execute("""
+            INSERT INTO role_permissions (role_id, permission_id)
+            SELECT r.id, p.id
+            FROM roles r, permissions p
+            WHERE r.name IN ('manager', 'supervisor') AND p.name = 'manage_users'
+            ON CONFLICT DO NOTHING
+        """)
+        await conn.execute("""
+            INSERT INTO role_permissions (role_id, permission_id)
+            SELECT r.id, p.id
+            FROM roles r, permissions p
+            WHERE r.name = 'admin'
+            ON CONFLICT DO NOTHING
+        """)
     await pool.close()
 
 @pytest.fixture
@@ -189,34 +313,30 @@ async def admin_token_headers(db_pool):
         is_superuser=False
     )
     user = await user_service.create_user(user_data)
-    
-    # Add admin role with manage_users permission
     async with db_pool.acquire() as conn:
-        # Create admin role if it doesn't exist
-        admin_role = await conn.fetchrow("""
-            INSERT INTO roles (name, description, permissions)
-            VALUES ('admin', 'Administrator role', ARRAY['manage_users'])
-            ON CONFLICT (name) DO UPDATE
-            SET permissions = ARRAY['manage_users']
-            RETURNING id, name, permissions
-        """)
-        
+        # Get admin role id
+        admin_role = await conn.fetchrow("SELECT id, name FROM roles WHERE name = 'admin'")
+        if admin_role is None:
+            raise RuntimeError("Admin role not found in test database. Check test DB setup.")
         # Assign admin role to user
-        await conn.execute("""
+        await conn.execute(
+            """
             INSERT INTO user_roles (user_id, role_id)
             VALUES ($1, $2)
             ON CONFLICT (user_id, role_id) DO NOTHING
-        """, user.id, admin_role['id'])
-    
-    # Create token with user data including roles
+            """,
+            user.id, admin_role['id']
+        )
+        # Debug: check user_roles assignment
+        user_roles = await conn.fetch("SELECT * FROM user_roles WHERE user_id = $1", user.id)
+        print(f"[DEBUG] user_roles for admin user: {user_roles}")
     access_token = create_access_token(
         subject=user.email,
         additional_claims={
             "is_superuser": False,
             "roles": [{
                 "id": admin_role['id'],
-                "name": admin_role['name'],
-                "permissions": admin_role['permissions']
+                "name": admin_role['name']
             }]
         }
     )

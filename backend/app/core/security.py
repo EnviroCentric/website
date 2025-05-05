@@ -105,7 +105,7 @@ async def get_current_user(
     user_dict = dict(user)
     if "is_superuser" in payload:
         user_dict["is_superuser"] = payload["is_superuser"]
-    if "roles" in payload:
-        user_dict["roles"] = payload["roles"]
-    
+    # Always load roles with permissions from DB
+    roles = await db.fetch(query_manager.get_user_roles_with_permissions, user["id"])
+    user_dict["roles"] = [dict(row) for row in roles]
     return user_dict

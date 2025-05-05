@@ -1,15 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
-from app.core.security import create_access_token, create_refresh_token, verify_password, verify_refresh_token
+from app.core.security import create_access_token, create_refresh_token, verify_password, verify_refresh_token, get_current_user
 from app.services.users import UserService
 from app.db.session import get_db
 import asyncpg
 from app.schemas.user import UserCreate, UserResponse, TokenResponse, UserWithTokens, UserInDB
-from app.core.security import get_current_user
 from app.core.validators import validate_email
 from pydantic import BaseModel, field_validator
 
-router = APIRouter()
+router = APIRouter(prefix="/auth", tags=["auth"])
 
 class RegisterRequest(UserCreate):
     password_confirm: str
@@ -65,22 +64,14 @@ async def login(
     db: asyncpg.Pool = Depends(get_db)
 ):
     """Login endpoint."""
-    # Validate email format
-    is_valid, error_message = validate_email(form_data.username)
-    if not is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_message
-        )
-    
     user_service = UserService(db)
-    user = await user_service.get_user_by_email(form_data.username)
     
-    # Check if user exists first
+    # First check if user exists
+    user = await user_service.get_user_by_email(form_data.username)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Email not registered. Please create an account first."
+            detail="User not found"
         )
     
     # Then check password
@@ -97,9 +88,11 @@ async def login(
             detail="Inactive user"
         )
     
+    access_token = create_access_token(subject=user.email)
+    refresh_token = create_refresh_token(subject=user.email)
     return {
-        "access_token": create_access_token(subject=user.email),
-        "refresh_token": create_refresh_token(subject=user.email),
+        "access_token": access_token,
+        "refresh_token": refresh_token,
         "token_type": "bearer"
     }
 
@@ -137,8 +130,6 @@ async def refresh_token(
     }
 
 @router.get("/me", response_model=UserResponse)
-async def get_current_user_info(
-    current_user: UserResponse = Depends(get_current_user)
-):
-    """Get current user information."""
-    return current_user 
+async def read_users_me(current_user: dict = Depends(get_current_user)):
+    """Get current user endpoint."""
+    return UserResponse(**current_user) 

@@ -8,25 +8,30 @@ class RoleBase(BaseModel):
     description: Optional[str] = None
 
 
-class RoleCreate(RoleBase):
+class RoleInternal(RoleBase):
+    level: int
+
+
+class RoleCreate(RoleInternal):
     permissions: Optional[List[str]] = []
 
 
-class RoleUpdate(RoleBase):
+class RoleUpdate(RoleInternal):
     permissions: Optional[List[str]] = None
 
 
-class RoleInDB(RoleBase):
-    role_id: int
-    role_order: int
+class RoleInDB(RoleInternal):
+    id: int
+    created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
-class RoleResponse(RoleInDB):
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+class RoleResponse(RoleBase):
+    id: int
+    level: int
+    created_at: datetime
+    permissions: List[str] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -37,7 +42,7 @@ class RolePermissionUpdate(BaseModel):
 
 class RoleOrder(BaseModel):
     role_id: int
-    role_order: int
+    level: int
 
 
 class RoleReorder(BaseModel):
