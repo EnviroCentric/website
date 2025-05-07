@@ -8,7 +8,7 @@ from app.schemas.user import UserCreate, UserResponse, TokenResponse, UserWithTo
 from app.core.validators import validate_email
 from pydantic import BaseModel, field_validator
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(tags=["auth"])
 
 class RegisterRequest(UserCreate):
     password_confirm: str

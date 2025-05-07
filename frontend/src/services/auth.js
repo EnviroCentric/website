@@ -1,7 +1,7 @@
 import axios from 'axios';
 import jwtDecode from 'jwt-decode';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 // Configure axios defaults
 axios.defaults.baseURL = API_URL;
@@ -53,7 +53,7 @@ export const getAuthToken = () => {
 // API Service Functions
 export const register = async (userData) => {
   try {
-    const response = await axios.post(`${API_URL}/auth/register`, {
+    const response = await axios.post('/api/v1/auth/register', {
       ...userData,
       password_confirm: userData.password
     });
@@ -75,7 +75,7 @@ export const login = async (email, password) => {
     formData.append('username', email);
     formData.append('password', password);
 
-    const response = await axios.post(`${API_URL}/auth/login`, formData);
+    const response = await axios.post('/api/v1/auth/login', formData);
     const { access_token, refresh_token } = response.data;
     
     // Store tokens
@@ -95,7 +95,7 @@ export const refreshToken = async () => {
       throw new Error('No refresh token available');
     }
 
-    const response = await axios.post(`${API_URL}/auth/refresh`, {
+    const response = await axios.post('/api/v1/auth/refresh', {
       refresh_token
     });
     
@@ -113,7 +113,7 @@ export const refreshToken = async () => {
 
 export const getCurrentUser = async () => {
   try {
-    const response = await axios.get(`${API_URL}/auth/me`);
+    const response = await axios.get('/api/v1/auth/me');
     return response.data;
   } catch (error) {
     throw error.response?.data || { detail: 'An error occurred while fetching user data' };

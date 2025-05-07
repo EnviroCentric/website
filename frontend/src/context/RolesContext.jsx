@@ -29,7 +29,7 @@ export function RolesProvider({ children }) {
     setError(null);
     try {
       fetchInProgress.current = true;
-      const response = await api.get('/roles/', {
+      const response = await api.get('/api/v1/roles', {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = response.data;
@@ -46,7 +46,7 @@ export function RolesProvider({ children }) {
 
   const reorderRoles = async (roleOrders) => {
     try {
-      const response = await api.put('/roles/reorder', { role_orders: roleOrders });
+      const response = await api.put('/api/v1/roles/reorder', { role_orders: roleOrders });
       return response.data;
     } catch (error) {
       console.error('Error reordering roles:', error);

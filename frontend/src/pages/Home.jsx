@@ -1,54 +1,77 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import Login from './Login';
-import Register from './Register';
+import React, { useEffect, useState } from 'react';
+import logo from '../assets/logo.png';
 
 export default function Home() {
-  const [isLoginOpen, setIsLoginOpen] = useState(false);
-  const [isRegisterOpen, setIsRegisterOpen] = useState(false);
-  const [loginMessage, setLoginMessage] = useState('');
-  const { user } = useAuth();
+  const [logoStyle, setLogoStyle] = useState({
+    height: '400px',
+    opacity: 1,
+    transform: 'translate(0, 0)',
+  });
 
-  const handleSwitchToLogin = (message) => {
-    setIsRegisterOpen(false);
-    setIsLoginOpen(true);
-    if (message) {
-      setLoginMessage(message);
-    }
-  };
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollPosition = window.scrollY;
+      const maxScroll = 400;
+      const minSize = 48;
+      const maxSize = 400;
+      
+      const progress = Math.min(1, scrollPosition / maxScroll);
+      const newHeight = maxSize - (progress * (maxSize - minSize));
+      const opacity = Math.max(0, 1 - (progress * 1.5));
+      // Calculate the position to move to top left with more leftward movement
+      const translateX = -progress * (window.innerWidth / 2 + 200); // Increased leftward movement
+      const translateY = -progress * (window.innerHeight / 2 - 24);
 
-  const handleSwitchToRegister = () => {
-    setIsLoginOpen(false);
-    setIsRegisterOpen(true);
-    setLoginMessage('');
-  };
+      setLogoStyle({
+        height: `${newHeight}px`,
+        opacity,
+        transform: `translate(${translateX}px, ${translateY}px)`,
+      });
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900 transition-colors duration-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+      {/* Large Logo Section */}
+      <div className="flex justify-center items-center h-[70vh] relative">
+        <img 
+          src={logo} 
+          alt="Enviro-Centric Logo" 
+          className="transition-all duration-300 absolute"
+          style={{
+            ...logoStyle,
+            width: 'auto',
+            transition: 'all 0.1s ease-out',
+          }}
+        />
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6" style={{ marginTop: '-50px' }}>
         {/* Services Section */}
         <section className="py-16 text-center">
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-12">
             Our Services
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-lg hover:-translate-y-2 transition-transform duration-300">
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Service One</h3>
+            <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-lg border border-gray-100 dark:border-gray-700 hover:-translate-y-2 transition-transform duration-300">
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Asbestos</h3>
               <p className="text-gray-600 dark:text-gray-300">
-                Comprehensive solutions for your needs
+                Inspections/Surveys, Clearances & Project Monitoring
               </p>
             </div>
-            <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-lg hover:-translate-y-2 transition-transform duration-300">
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Service Two</h3>
+            <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-lg border border-gray-100 dark:border-gray-700 hover:-translate-y-2 transition-transform duration-300">
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Lead</h3>
               <p className="text-gray-600 dark:text-gray-300">
-                Expert assistance and support
+                Inspections, Risk Assessments, Clearances & Project Monitoring
               </p>
             </div>
-            <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-lg hover:-translate-y-2 transition-transform duration-300">
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Service Three</h3>
+            <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-lg border border-gray-100 dark:border-gray-700 hover:-translate-y-2 transition-transform duration-300">
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Microbial</h3>
               <p className="text-gray-600 dark:text-gray-300">
-                Professional guidance and solutions
+                Inspections/Surveys & Clearances
               </p>
             </div>
           </div>
@@ -64,146 +87,70 @@ export default function Home() {
               <div>
                 <h3 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">Service Areas</h3>
                 <p className="text-lg text-gray-600 dark:text-gray-300">
-                  Serving customers worldwide
+                  Serving all of California
                 </p>
               </div>
               <div>
                 <h3 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">Our Expertise</h3>
                 <ul className="text-lg text-gray-600 dark:text-gray-300 space-y-2">
-                  <li>Expert Consultants</li>
-                  <li>Professional Team</li>
-                  <li>Quality Assurance</li>
-                  <li>Customer Support</li>
+                  <li>Asbestos Consultants</li>
+                  <li>CDPH Lead Inspectors</li>
+                  <li>Risk Assessors</li>
+                  <li>Project Monitors</li>
                 </ul>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Contact Information Section */}
+        {/* Credentials and Contact Section */}
         <section className="py-16 text-center">
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-12">
-            Contact Us
+            Our Information
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-lg">
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Office Information</h3>
-              <div className="space-y-4 text-gray-600 dark:text-gray-300">
-                <p>123 Business Street</p>
-                <p>City, State 12345</p>
-                <p>Phone: (555) 123-4567</p>
-                <p>Email: info@company.com</p>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Credentials Section */}
+              <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-lg border border-gray-100 dark:border-gray-700">
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
+                  Our Credentials
+                </h3>
+                <div className="flex flex-col space-y-6">
+                  <div>
+                    <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Licenses</h4>
+                    <p className="text-gray-600 dark:text-gray-300">
+                      CAC 23-7444<br />
+                      LRC 00002495
+                    </p>
+                  </div>
+                  <div>
+                    <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">NAICS Codes</h4>
+                    <p className="text-gray-600 dark:text-gray-300">
+                      236220, 238320, 238910,<br />
+                      238990, 541350, 541380,<br />
+                      54162
+                    </p>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-lg">
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Business Hours</h3>
-              <div className="space-y-4 text-gray-600 dark:text-gray-300">
-                <p>Monday - Friday: 9:00 AM - 5:00 PM</p>
-                <p>Saturday: 10:00 AM - 2:00 PM</p>
-                <p>Sunday: Closed</p>
+
+              {/* Contact Section */}
+              <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-lg border border-gray-100 dark:border-gray-700">
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
+                  Contact Us
+                </h3>
+                <div className="space-y-4 text-gray-600 dark:text-gray-300">
+                  <p>Phone: (714) 335-5973</p>
+                  <p>Phone: (619) 779-1698</p>
+                  <p>Email: info@enviro-centric.com</p>
+                  <p>P.O. Box 122202</p>
+                  <p>Chula Vista, CA 91912</p>
+                </div>
               </div>
             </div>
           </div>
         </section>
-
-        {/* Credentials Section */}
-        <section className="py-16 text-center bg-gray-50 dark:bg-gray-800 rounded-lg mb-6 px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-12">
-            Our Credentials
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <div className="bg-white dark:bg-gray-700 p-6 rounded-lg shadow-lg">
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Licenses</h3>
-              <ul className="space-y-2 text-gray-600 dark:text-gray-300">
-                <li>State License #12345</li>
-                <li>Federal License #67890</li>
-                <li>Professional Certification #ABC123</li>
-              </ul>
-            </div>
-            <div className="bg-white dark:bg-gray-700 p-6 rounded-lg shadow-lg">
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Certifications</h3>
-              <ul className="space-y-2 text-gray-600 dark:text-gray-300">
-                <li>ISO 9001 Certified</li>
-                <li>Industry Standard Certified</li>
-                <li>Safety Certified</li>
-              </ul>
-            </div>
-            <div className="bg-white dark:bg-gray-700 p-6 rounded-lg shadow-lg">
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Affiliations</h3>
-              <ul className="space-y-2 text-gray-600 dark:text-gray-300">
-                <li>Industry Association Member</li>
-                <li>Professional Organization</li>
-                <li>Chamber of Commerce</li>
-              </ul>
-            </div>
-          </div>
-        </section>
-
-        {/* Call to Action Section */}
-        {!user && (
-          <section className="py-16 text-center bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg">
-            <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-              <h2 className="text-3xl md:text-4xl font-bold text-white mb-6">
-                Ready to Get Started?
-              </h2>
-              <p className="text-xl text-white mb-8">
-                Join our community of satisfied users today!
-              </p>
-              <div className="space-x-4">
-                <button
-                  onClick={() => setIsRegisterOpen(true)}
-                  className="inline-block px-8 py-4 bg-white text-indigo-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors duration-300"
-                >
-                  Sign Up Now
-                </button>
-                <button
-                  onClick={() => setIsLoginOpen(true)}
-                  className="inline-block px-8 py-4 bg-indigo-700 text-white font-semibold rounded-lg hover:bg-indigo-800 transition-colors duration-300"
-                >
-                  Sign In
-                </button>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* User Actions Section */}
-        {user && (
-          <section className="py-16 text-center">
-            <div className="max-w-3xl mx-auto">
-              <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-8">
-                Welcome back, {user.first_name.charAt(0).toUpperCase() + user.first_name.slice(1)}!
-              </h2>
-              <div className="space-x-4">
-                <Link
-                  to="/profile"
-                  className="inline-block px-8 py-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors duration-300"
-                >
-                  View Profile
-                </Link>
-                <Link
-                  to="/dashboard"
-                  className="inline-block px-8 py-4 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors duration-300"
-                >
-                  Go to Dashboard
-                </Link>
-          </div>
-        </div>
-          </section>
-        )}
       </div>
-
-      <Login 
-        isOpen={isLoginOpen} 
-        onClose={() => setIsLoginOpen(false)}
-        onSwitchToRegister={handleSwitchToRegister}
-        successMessage={loginMessage}
-      />
-      <Register 
-        isOpen={isRegisterOpen} 
-        onClose={() => setIsRegisterOpen(false)}
-        onSwitchToLogin={handleSwitchToLogin}
-      />
     </div>
   );
 } 

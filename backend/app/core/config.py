@@ -4,27 +4,35 @@ from pydantic import AnyHttpUrl, field_validator, ConfigDict
 import os
 import json
 
-
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "temp"
-    VERSION: str = "1.0.0"
-    DESCRIPTION: str = "temp api"
+    PROJECT_NAME: str = os.getenv("PROJECT_NAME", "Enviro-Centric")
+    VERSION: str = os.getenv("VERSION", "1.0.0")
+    DESCRIPTION: str = os.getenv("DESCRIPTION", "Enviro-Centric API")
+
+    # API Configuration
+    API_V1_STR: str = os.getenv("API_V1_STR", "/api/v1")
+    BACKEND_PORT: int = int(os.getenv("BACKEND_PORT", "8000"))
+
+    # JWT Configuration
+    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY")
+    JWT_REFRESH_SECRET_KEY: str = os.getenv("JWT_REFRESH_SECRET_KEY")
+    JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
 
     # API Configuration
     API_V1_STR: str = "/api/v1"
     BACKEND_PORT: int = int(os.getenv("BACKEND_PORT", "8000"))
 
     # JWT Configuration
-    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "your-secret-key-here")
-    JWT_REFRESH_SECRET_KEY: str = os.getenv("JWT_REFRESH_SECRET_KEY", "your-refresh-secret-key-here")
+    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY")
+    JWT_REFRESH_SECRET_KEY: str = os.getenv("JWT_REFRESH_SECRET_KEY")
     JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
     REFRESH_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_MINUTES", "10080"))  # 7 days
 
     # Database Configuration
-    POSTGRES_USER: str = os.getenv("POSTGRES_USER", "user")
-    POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "password")
-    POSTGRES_DB: str = os.getenv("POSTGRES_DB", "dbname")
+    POSTGRES_USER: str = os.getenv("POSTGRES_USER")
+    POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD")
+    POSTGRES_DB: str = os.getenv("POSTGRES_DB")
     POSTGRES_HOST: str = os.getenv("POSTGRES_HOST", "db")
     POSTGRES_PORT: str = os.getenv("POSTGRES_PORT", "5432")
 

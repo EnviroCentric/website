@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import logo from '../assets/logo.png';
 import Login from '../pages/Login';
 import Register from '../pages/Register';
 
@@ -25,6 +26,10 @@ export default function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const profileMenuRef = useRef(null);
+  const [navbarStyle, setNavbarStyle] = useState({
+    opacity: 0,
+    transform: 'translate(0, 0)',
+  });
 
   const isSuperuser = user?.is_superuser || user?.roles?.some(role => role.name.toLowerCase() === 'admin');
 
@@ -63,6 +68,26 @@ export default function Navbar() {
     };
   }, []);
 
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollPosition = window.scrollY;
+      const maxScroll = 400;
+      
+      const progress = Math.min(1, scrollPosition / maxScroll);
+      // Start appearing when progress is > 0.7 (70% scrolled)
+      const adjustedProgress = Math.max(0, (progress - 0.7) / 0.3);
+      const opacity = Math.min(1, adjustedProgress * 1.5);
+
+      setNavbarStyle({
+        opacity,
+        transform: 'translate(0, 0)',
+      });
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   const handleThemeToggle = () => {
     toggleTheme();
   };
@@ -88,16 +113,46 @@ export default function Navbar() {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white dark:bg-gray-800 shadow-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center">
-              <Link to="/" className="text-xl font-bold text-gray-900 dark:text-white">
-                Your App
+            {/* Logo */}
+            <div className="flex-shrink-0">
+              <Link to="/" className="flex items-center">
+                <img 
+                  src={logo} 
+                  alt="Enviro-Centric Logo" 
+                  className="h-12 w-auto transition-all duration-300"
+                  style={{
+                    ...navbarStyle,
+                    transition: 'all 0.1s ease-out',
+                  }}
+                />
               </Link>
             </div>
 
+            {/* Navigation Links */}
+            <div className="hidden md:block">
+              <div className="ml-10 flex items-center space-x-4">
+                {navigation.map((item) => (
+                  <Link
+                    key={item.name}
+                    to={item.href}
+                    className={`${
+                      item.current
+                        ? 'bg-gray-900 text-white'
+                        : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                    } px-3 py-2 rounded-md text-sm font-medium`}
+                  >
+                    {item.name}
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            {/* Right side buttons */}
             <div className="flex items-center space-x-4">
               <button
                 onClick={handleThemeToggle}
                 className="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+                aria-label="Toggle dark mode"
               >
                 {isDarkMode ? (
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

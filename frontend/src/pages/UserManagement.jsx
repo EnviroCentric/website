@@ -90,7 +90,7 @@ export default function UserManagement() {
       setIsLoading(true);
       await fetchRoles(true); // Force refresh roles
       
-      const usersRes = await fetch(`${import.meta.env.VITE_API_URL}/users/`, {
+      const usersRes = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/users`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!usersRes.ok) throw new Error('Failed to fetch users');
@@ -113,7 +113,7 @@ export default function UserManagement() {
 
   const handleEditUser = async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/users/${selectedUser.id}`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/users/${selectedUser.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -126,7 +126,7 @@ export default function UserManagement() {
       if (!res.ok) throw new Error('Failed to update user');
 
       if (JSON.stringify(editedUser.roles) !== JSON.stringify(selectedUser.roles.map(r => r.id))) {
-        const rolesRes = await fetch(`${import.meta.env.VITE_API_URL}/users/${selectedUser.id}/roles`, {
+        const rolesRes = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/users/${selectedUser.id}/roles`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -169,7 +169,7 @@ export default function UserManagement() {
 
   const handleDeleteUser = async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/users/${selectedUser.id}`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/users/${selectedUser.id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
