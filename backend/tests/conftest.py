@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.core.security import create_access_token, get_password_hash
 from app.schemas.user import UserCreate, UserResponse
 from app.services.users import UserService
+from app.services.roles import RoleService
 from app.db.session import get_db
 
 # Set test environment
@@ -109,6 +110,42 @@ async def create_test_database():
             )
         """)
 
+        # Create addresses table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS addresses (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                date DATE NOT NULL,
+                sample_ids INTEGER[] DEFAULT '{}',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT unique_address_per_day UNIQUE (name, date)
+            )
+        """)
+
+        # Create projects table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS projects (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) UNIQUE NOT NULL,
+                address_ids INTEGER[] DEFAULT '{}',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # Create project_technicians table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS project_technicians (
+                project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                assigned_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (project_id, user_id)
+            )
+        """)
+
+        # Create indexes
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_addresses_date ON addresses(date)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_addresses_name ON addresses(name)")
+
         # Create user_roles_with_permissions view
         await conn.execute("""
             CREATE OR REPLACE VIEW user_roles_with_permissions AS
@@ -133,7 +170,8 @@ async def create_test_database():
             VALUES
                 ('admin', 'Administrator with full system access', 100),
                 ('manager', 'Manager with elevated access', 90),
-                ('supervisor', 'Supervisor with team management access', 80)
+                ('supervisor', 'Supervisor with team management access', 80),
+                ('technician', 'Technician with project management access', 50)
             ON CONFLICT (name) DO UPDATE SET level = EXCLUDED.level
         """)
         
@@ -166,6 +204,9 @@ async def create_test_database():
     # Cleanup after tests
     async with test_pool.acquire() as conn:
         await conn.execute("DROP VIEW IF EXISTS user_roles_with_permissions")
+        await conn.execute("DROP TABLE IF EXISTS project_technicians")
+        await conn.execute("DROP TABLE IF EXISTS projects")
+        await conn.execute("DROP TABLE IF EXISTS addresses")
         await conn.execute("DROP TABLE IF EXISTS role_permissions")
         await conn.execute("DROP TABLE IF EXISTS user_roles")
         await conn.execute("DROP TABLE IF EXISTS permissions")
@@ -182,6 +223,9 @@ async def db_pool(create_test_database) -> AsyncGenerator[Pool, None]:
     # Clean up the tables after each test
     async with pool.acquire() as conn:
         await conn.execute("DROP VIEW IF EXISTS user_roles_with_permissions")
+        await conn.execute("TRUNCATE TABLE project_technicians RESTART IDENTITY CASCADE")
+        await conn.execute("TRUNCATE TABLE projects RESTART IDENTITY CASCADE")
+        await conn.execute("TRUNCATE TABLE addresses RESTART IDENTITY CASCADE")
         await conn.execute("TRUNCATE TABLE user_roles RESTART IDENTITY CASCADE")
         await conn.execute("TRUNCATE TABLE role_permissions RESTART IDENTITY CASCADE")
         await conn.execute("TRUNCATE TABLE permissions RESTART IDENTITY CASCADE")
@@ -206,20 +250,25 @@ async def db_pool(create_test_database) -> AsyncGenerator[Pool, None]:
             GROUP BY ur.user_id, r.id, r.name, r.description, r.level, r.created_at
         """)
         
-        # Re-insert default roles, permissions, and assignments after truncation
+        # Re-insert default roles
         await conn.execute("""
             INSERT INTO roles (name, description, level)
             VALUES
                 ('admin', 'Administrator with full system access', 100),
                 ('manager', 'Manager with elevated access', 90),
-                ('supervisor', 'Supervisor with team management access', 80)
+                ('supervisor', 'Supervisor with team management access', 80),
+                ('technician', 'Technician with project management access', 50)
             ON CONFLICT (name) DO UPDATE SET level = EXCLUDED.level
         """)
+        
+        # Re-insert manage_users permission
         await conn.execute("""
             INSERT INTO permissions (name, description)
             VALUES ('manage_users', 'Permission to manage user accounts and access')
             ON CONFLICT (name) DO NOTHING
         """)
+        
+        # Re-assign manage_users permission to manager and supervisor
         await conn.execute("""
             INSERT INTO role_permissions (role_id, permission_id)
             SELECT r.id, p.id
@@ -227,6 +276,8 @@ async def db_pool(create_test_database) -> AsyncGenerator[Pool, None]:
             WHERE r.name IN ('manager', 'supervisor') AND p.name = 'manage_users'
             ON CONFLICT DO NOTHING
         """)
+        
+        # Re-assign all permissions to admin
         await conn.execute("""
             INSERT INTO role_permissions (role_id, permission_id)
             SELECT r.id, p.id
@@ -234,6 +285,7 @@ async def db_pool(create_test_database) -> AsyncGenerator[Pool, None]:
             WHERE r.name = 'admin'
             ON CONFLICT DO NOTHING
         """)
+    
     await pool.close()
 
 @pytest.fixture
@@ -341,3 +393,47 @@ async def admin_token_headers(db_pool):
         }
     )
     return {"Authorization": f"Bearer {access_token}"}
+
+@pytest.fixture
+async def technician_user(db_pool):
+    """Create a test technician user."""
+    user_service = UserService(db_pool)
+    role_service = RoleService(db_pool)
+    user_data = UserCreate(
+        email="technician@test.com",
+        password="TestPass123!",
+        first_name="Test",
+        last_name="Technician"
+    )
+    user = await user_service.create_user(user_data)
+    
+    # Assign technician role
+    await role_service.assign_roles(user.id, ["technician"], user.id)
+    
+    return user
+
+@pytest.fixture
+async def technician_token_headers(client: AsyncClient, technician_user: UserResponse):
+    """Get token headers for technician user."""
+    access_token = create_access_token(subject=technician_user.email)
+    return {"Authorization": f"Bearer {access_token}"}
+
+@pytest.fixture
+async def admin_user(db_pool):
+    """Create an admin user for testing."""
+    user_service = UserService(db_pool)
+    user_data = UserCreate(
+        email="admin@test.com",
+        password="TestPass123!",
+        first_name="Admin",
+        last_name="User",
+        is_active=True,
+        is_superuser=False
+    )
+    user = await user_service.create_user(user_data)
+    
+    # Assign admin role
+    role_service = RoleService(db_pool)
+    await role_service.assign_roles(user.id, ["admin"], user.id)
+    
+    return user

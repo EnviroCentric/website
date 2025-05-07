@@ -3,6 +3,17 @@ from asyncpg import Pool
 from app.schemas.role import RoleCreate, RoleUpdate, RoleResponse
 from app.db.queries.manager import query_manager
 
+async def get_user_role_level(pool: Pool, user_id: int) -> int:
+    """Get the highest role level for a user."""
+    async with pool.acquire() as conn:
+        level = await conn.fetchval("""
+            SELECT COALESCE(MAX(r.level), 0)
+            FROM user_roles ur
+            JOIN roles r ON ur.role_id = r.id
+            WHERE ur.user_id = $1
+        """, user_id)
+        return level
+
 class RoleService:
     def __init__(self, pool: Pool):
         self.pool = pool
@@ -50,4 +61,27 @@ class RoleService:
         """Delete a role."""
         async with self.pool.acquire() as conn:
             result = await conn.execute(query_manager.delete_role, role_id)
-            return result == "DELETE 1" 
+            return result == "DELETE 1"
+
+    async def assign_roles(self, user_id: int, role_names: List[str], assigned_by: int) -> None:
+        """Assign roles to a user."""
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                # Get role IDs for the given role names
+                role_ids = []
+                for role_name in role_names:
+                    role = await conn.fetchrow(
+                        query_manager.get_role_by_name,
+                        role_name
+                    )
+                    if not role:
+                        raise ValueError(f"Role '{role_name}' not found")
+                    role_ids.append(role['id'])
+
+                # Assign each role to the user
+                for role_id in role_ids:
+                    await conn.execute(
+                        query_manager.insert_user_role,
+                        user_id,
+                        role_id
+                    ) 
