@@ -1,15 +1,11 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from app.core.config import settings
+from typing import AsyncGenerator
+from app.db.engine import get_connection
+import asyncpg
 
-engine = create_engine(settings.get_database_url, pool_pre_ping=True)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
-# Dependency
-def get_db():
-    db = SessionLocal()
+async def get_db() -> AsyncGenerator[asyncpg.Pool, None]:
+    """Dependency for getting database connection pool."""
+    pool = await get_connection()
     try:
-        yield db
+        yield pool
     finally:
-        db.close()
+        await pool.close()

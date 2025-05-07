@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import Modal from '../components/Modal';
-import { isValidEmail } from '../utils/validation';
 
 export default function Login({ isOpen, onClose, onSwitchToRegister, successMessage }) {
   const [formData, setFormData] = useState(() => {
@@ -16,12 +14,24 @@ export default function Login({ isOpen, onClose, onSwitchToRegister, successMess
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [emailError, setEmailError] = useState('');
-  const [isCheckingEmail, setIsCheckingEmail] = useState(false);
+  const [isEmailUnregistered, setIsEmailUnregistered] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = location.state?.from?.pathname || '/dashboard';
+
+  // Clear form data when modal is closed
+  useEffect(() => {
+    if (!isOpen) {
+      setFormData({
+        email: '',
+        password: '',
+      });
+      setError('');
+      setIsEmailUnregistered(false);
+      setShowPassword(false);
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -29,81 +39,35 @@ export default function Login({ isOpen, onClose, onSwitchToRegister, successMess
     }
   }, [formData, isOpen]);
 
-  // Check email when component mounts
-  useEffect(() => {
-    if (isOpen && formData.email && isValidEmail(formData.email)) {
-      checkEmailAvailability(formData.email);
-    }
-  }, [isOpen]);
-
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
       [name]: value
     }));
-  };
-
-  const checkEmailAvailability = async (email) => {
-    if (!isValidEmail(email)) {
-      setEmailError('Please enter a valid email address');
-      return;
-    }
-
-    setIsCheckingEmail(true);
-    try {
-      const response = await api.get(`/users/check-email/${encodeURIComponent(email)}`);
-      if (!response.data.exists) {
-        setEmailError('This email is not registered. Would you like to create an account?');
-      } else {
-        setEmailError('');
-      }
-    } catch (err) {
-      setEmailError('Error checking email availability');
-    } finally {
-      setIsCheckingEmail(false);
-    }
-  };
-
-  const handleEmailBlur = (e) => {
-    const email = e.target.value;
-    if (email) {
-      checkEmailAvailability(email);
+    // Reset error states when email changes
+    if (name === 'email') {
+      setError('');
+      setIsEmailUnregistered(false);
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsLoading(true);
     setError('');
-    
-    // If we already know this email isn't registered, prevent the login attempt
-    if (emailError && emailError.includes('not registered')) {
-      setIsLoading(false);
-      return;
-    }
+    setIsLoading(true);
 
     try {
-      const res = await api.post('/auth/login', formData);
-      login(res.data.access_token);
+      await login(formData.email, formData.password);
       localStorage.removeItem('loginFormData');
       onClose();
       navigate(from, { replace: true });
-    } catch (err) {
-      if (err.response?.status === 401) {
-        // Check if the email exists when login fails
-        try {
-          const emailCheck = await api.get(`/users/check-email/${encodeURIComponent(formData.email)}`);
-          if (!emailCheck.data.exists) {
-            setEmailError('This email is not registered. Would you like to create an account?');
-          } else {
-            setError('Incorrect password. Please try again.');
-          }
-        } catch (checkErr) {
-          setError('Login failed. Please try again.');
-        }
+    } catch (error) {
+      if (error.detail === "Email not registered. Please create an account first.") {
+        setError(error.detail);
+        setIsEmailUnregistered(true);
       } else {
-        setError(err.response?.data?.message || 'Login failed. Please try again.');
+        setError(error.detail || 'An error occurred during login');
       }
     } finally {
       setIsLoading(false);
@@ -127,8 +91,27 @@ export default function Login({ isOpen, onClose, onSwitchToRegister, successMess
         )}
         {error && (
           <div className="rounded-md bg-red-50 dark:bg-red-900/20 p-4">
-            <div className="text-sm text-red-700 dark:text-red-400">
-              {error}
+            <div className="flex">
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-800 dark:text-red-400">
+                  {error}
+                </h3>
+                {isEmailUnregistered && (
+                  <div className="mt-2 text-sm text-red-700 dark:text-red-400">
+                    <p>
+                      Please{' '}
+                      <button
+                        type="button"
+                        onClick={onSwitchToRegister}
+                        className="font-medium text-red-700 dark:text-red-400 underline hover:text-red-600 dark:hover:text-red-300"
+                      >
+                        create an account
+                      </button>
+                      {' '}or try a different email address.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -144,44 +127,13 @@ export default function Login({ isOpen, onClose, onSwitchToRegister, successMess
                 required
                 value={formData.email}
                 onChange={handleChange}
-                onBlur={handleEmailBlur}
                 className={`appearance-none rounded-none relative block w-full px-3 py-2 border ${
-                  emailError ? 'border-red-300' : 'border-gray-300'
-                } dark:border-gray-700 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white dark:bg-gray-800 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm`}
+                  isEmailUnregistered ? 'border-red-300 dark:border-red-700' : 'border-gray-300 dark:border-gray-700'
+                } placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white dark:bg-gray-800 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm`}
                 placeholder="Email address"
+                disabled={isEmailUnregistered}
               />
-              {isCheckingEmail && (
-                <div className="absolute right-0 top-0 mt-2 mr-2">
-                  <svg className="animate-spin h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                </div>
-              )}
             </div>
-            {emailError && (
-              <div className="relative z-10 mb-4">
-                <div className="mt-2 p-3 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 shadow-sm">
-                  <div className="flex items-center">
-                    <svg className="h-5 w-5 text-red-400 dark:text-red-500 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <p className="text-sm text-red-700 dark:text-red-400">
-                      {emailError}
-                      {emailError.includes('not registered') && (
-                        <button
-                          type="button"
-                          onClick={onSwitchToRegister}
-                          className="ml-1 font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline"
-                        >
-                          Create account
-                        </button>
-                      )}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
             <div className="relative">
               <label htmlFor="password" className="sr-only">Password</label>
               <input
@@ -194,11 +146,13 @@ export default function Login({ isOpen, onClose, onSwitchToRegister, successMess
                 onChange={handleChange}
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-700 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white dark:bg-gray-800 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm pr-10"
                 placeholder="Password"
+                disabled={isEmailUnregistered}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center z-20 hover:text-gray-500 dark:hover:text-gray-300"
+                tabIndex="-1"
+                className="absolute inset-y-0 right-0 pr-3 flex items-center z-20"
               >
                 {showPassword ? (
                   <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -217,8 +171,10 @@ export default function Login({ isOpen, onClose, onSwitchToRegister, successMess
           <div>
             <button
               type="submit"
-              disabled={isLoading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isLoading || isEmailUnregistered}
+              className={`group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white ${
+                isEmailUnregistered ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'
+              } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               {isLoading ? (
                 <span className="absolute left-0 inset-y-0 flex items-center pl-3">
@@ -231,14 +187,17 @@ export default function Login({ isOpen, onClose, onSwitchToRegister, successMess
               {isLoading ? 'Signing in...' : 'Sign in'}
             </button>
           </div>
-          <div className="flex flex-col items-center gap-4">
-            <button
-              type="button"
-              onClick={onSwitchToRegister}
-              className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-sm font-medium"
-            >
-              Need an account? Register
-            </button>
+          <div className="text-center">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Don't have an account?{' '}
+              <button
+                type="button"
+                onClick={onSwitchToRegister}
+                className="font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300"
+              >
+                Create one now
+              </button>
+            </p>
           </div>
         </form>
       </div>

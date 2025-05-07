@@ -35,12 +35,6 @@ services:
       - ADMIN_CREATION_SECRET=${ADMIN_CREATION_SECRET}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
       - BACKEND_PORT=${BACKEND_PORT}
-    command: >
-      sh -c "while ! pg_isready -h db -p 5432 -U $POSTGRES_USER; do
-        echo 'Waiting for database...';
-        sleep 2;
-      done;
-      uvicorn app.main:app --host 0.0.0.0 --port 8000 $UVICORN_EXTRA_FLAGS"
     depends_on:
       db:
         condition: service_healthy
@@ -54,8 +48,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
     volumes:
-      - ./backend/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
-      - temp:/var/lib/postgresql/data
+      - enviro:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -64,5 +57,5 @@ services:
       start_period: 10s
 
 volumes:
-  temp:
+  enviro:
     external: true

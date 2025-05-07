@@ -3,7 +3,7 @@ import { setAuthToken } from '../utils/auth';
 
 export const login = async (credentials) => {
   try {
-    const response = await api.post('/auth/login', credentials);
+    const response = await api.post('/api/v1/auth/login', credentials);
     const { access_token } = response.data;
     setAuthToken(access_token);
     return response.data;
@@ -14,7 +14,7 @@ export const login = async (credentials) => {
 
 export const register = async (userData) => {
   try {
-    const response = await api.post('/auth/register', userData);
+    const response = await api.post('/api/v1/auth/register', userData);
     return response.data;
   } catch (error) {
     throw error.response?.data || { message: 'Registration failed' };

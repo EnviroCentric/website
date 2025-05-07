@@ -5,7 +5,7 @@ export default function Home() {
   const [logoStyle, setLogoStyle] = useState({
     height: '400px',
     opacity: 1,
-    transform: 'translateY(0)',
+    transform: 'translate(0, 0)',
   });
 
   useEffect(() => {
@@ -18,12 +18,14 @@ export default function Home() {
       const progress = Math.min(1, scrollPosition / maxScroll);
       const newHeight = maxSize - (progress * (maxSize - minSize));
       const opacity = Math.max(0, 1 - (progress * 1.5));
-      const translateY = -progress * 100;
+      // Calculate the position to move to top left with more leftward movement
+      const translateX = -progress * (window.innerWidth / 2 + 200); // Increased leftward movement
+      const translateY = -progress * (window.innerHeight / 2 - 24);
 
       setLogoStyle({
         height: `${newHeight}px`,
         opacity,
-        transform: `translateY(${translateY}px)`,
+        transform: `translate(${translateX}px, ${translateY}px)`,
       });
     };
 
@@ -38,7 +40,7 @@ export default function Home() {
         <img 
           src={logo} 
           alt="Enviro-Centric Logo" 
-          className="transition-all duration-300 absolute bottom-0"
+          className="transition-all duration-300 absolute"
           style={{
             ...logoStyle,
             width: 'auto',

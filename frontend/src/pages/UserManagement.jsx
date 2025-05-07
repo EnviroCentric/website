@@ -1,212 +1,268 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import DraggableModal from '../legacy/DraggableModal';
+import { useAuth } from '../context/AuthContext';
+import { useRoles } from '../context/RolesContext';
 
-const SORT_OPTIONS = {
-  ALPHA_ASC: 'alpha_asc',
-  ALPHA_DESC: 'alpha_desc',
-};
-
-function UserManagement() {
-  const { token, user } = useAuth();
+export default function UserManagement() {
+  const { token, isAuthenticated, user: currentUser, refreshUserData } = useAuth();
+  const { roles, fetchRoles } = useRoles();
   const navigate = useNavigate();
-  const [users, setUsers] = useState([]);
-  const [filteredUsers, setFilteredUsers] = useState([]);
-  const [roles, setRoles] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [users, setUsers] = useState([]);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
-  const [showRoleModal, setShowRoleModal] = useState(false);
-  const [userRoles, setUserRoles] = useState([]);
+  const [editedUser, setEditedUser] = useState({
+    email: '',
+    is_active: true,
+    roles: []
+  });
   const [hasAccess, setHasAccess] = useState(false);
-  const [sortBy, setSortBy] = useState(SORT_OPTIONS.ALPHA_ASC);
-  const modalRef = useRef(null);
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
+  const fetchInProgress = useRef(false);
+  const lastFetchTime = useRef(0);
+  const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes in milliseconds
+
+  // Get user's highest role level
+  const getUserHighestRoleLevel = useCallback(() => {
+    if (currentUser?.is_superuser) return Infinity;
+    return Math.max(...(currentUser?.roles?.map(role => role.level || 0) || [0]));
+  }, [currentUser]);
+
+  // Check if user can edit another user based on role levels
+  const canEditUser = useCallback((targetUser) => {
+    if (currentUser?.is_superuser) return true;
+    if (targetUser.id === currentUser?.id) return true;
+    
+    const currentUserLevel = getUserHighestRoleLevel();
+    const targetUserHighestLevel = Math.max(...(targetUser?.roles?.map(role => role.level || 0) || [0]));
+    
+    return targetUserHighestLevel < currentUserLevel;
+  }, [currentUser, getUserHighestRoleLevel]);
+
+  // Filter roles that user can assign
+  const getAssignableRoles = useCallback(() => {
+    const userHighestLevel = getUserHighestRoleLevel();
+    // For admin users (level 100), show all roles except admin
+    if (userHighestLevel === 100) {
+      return roles.filter(role => role.name.toLowerCase() !== 'admin');
+    }
+    // For all other users, show any roles below their highest level
+    return roles.filter(role => role.level < userHighestLevel);
+  }, [roles, getUserHighestRoleLevel]);
 
   useEffect(() => {
-    const checkAccess = async () => {
-      if (!token) {
-        setLoading(false);
-        navigate('/');
-        return;
-      }
+    if (!isAuthenticated) {
+      navigate('/');
+      return;
+    }
 
-      try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/roles/check-permission`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ permission: 'manage_users' })
-        });
-        
-        if (!response.ok) {
-          throw new Error('Failed to verify access');
-        }
-        
-        const data = await response.json();
-        setHasAccess(data.has_permission);
-        
-        if (data.has_permission) {
-          await loadData();
-        } else {
-          navigate('/');
-        }
-      } catch (err) {
-        console.error('Error checking access:', err);
-        setError('Failed to verify access permissions');
-        setHasAccess(false);
-        navigate('/');
-      } finally {
-        setLoading(false);
-      }
+    const checkAccess = () => {
+      if (currentUser?.is_superuser) return true;
+      return currentUser?.roles?.some(role =>
+        role.permissions?.includes('manage_users')
+      );
     };
 
-    checkAccess();
-  }, [token, navigate]);
-
-  useEffect(() => {
-    if (!token) {
+    const hasPermission = checkAccess();
+    setHasAccess(hasPermission);
+    if (hasPermission) {
+      fetchData(true); // Force refresh on mount
+    } else {
       navigate('/');
     }
-  }, [token, navigate]);
+    setIsLoading(false);
+  }, [isAuthenticated, currentUser, navigate]);
 
-  const loadData = async () => {
+  const fetchData = useCallback(async (force = false) => {
+    const now = Date.now();
+    if (!force && users.length > 0 && now - lastFetchTime.current < CACHE_DURATION) {
+      return; // Use cached data if it's still valid
+    }
+
+    if (fetchInProgress.current) {
+      return; // Prevent concurrent fetches
+    }
+
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users/management-data`, {
+      fetchInProgress.current = true;
+      setIsLoading(true);
+      await fetchRoles(true); // Force refresh roles
+      
+      const usersRes = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/users`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!usersRes.ok) throw new Error('Failed to fetch users');
+      const usersData = await usersRes.json();
+      
+      setUsers(usersData);
+      lastFetchTime.current = now;
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      fetchInProgress.current = false;
+      setIsLoading(false);
+    }
+  }, [token, fetchRoles, users.length]);
+
+  // Add refresh handler
+  const handleRefresh = useCallback(() => {
+    fetchData(true);
+  }, [fetchData]);
+
+  const handleEditUser = async () => {
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/users/${selectedUser.id}`, {
+        method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify({
+          is_active: editedUser.is_active,
+        }),
       });
+      if (!res.ok) throw new Error('Failed to update user');
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch management data');
-      }
-
-      const data = await response.json();
-      setUsers(data.users);
-      setFilteredUsers(data.users);
-      setRoles(data.roles);
-    } catch (err) {
-      console.error('Error loading data:', err);
-      setError('Failed to load data. Please try again.');
-    }
-  };
-
-  useEffect(() => {
-    const filtered = users
-      .filter(user => {
-        const searchLower = searchQuery.toLowerCase();
-        const userRoles = user.roles || [];
-        const roleNames = userRoles.map(role => role.name.toLowerCase()).join(' ');
-        
-        return (
-          user.first_name.toLowerCase().includes(searchLower) ||
-          user.last_name.toLowerCase().includes(searchLower) ||
-          user.email.toLowerCase().includes(searchLower) ||
-          roleNames.includes(searchLower)
-        );
-      })
-      .sort((a, b) => {
-        switch (sortBy) {
-          case SORT_OPTIONS.ALPHA_ASC:
-            return (a.first_name + a.last_name).localeCompare(b.first_name + b.last_name);
-          case SORT_OPTIONS.ALPHA_DESC:
-            return (b.first_name + b.last_name).localeCompare(a.first_name + a.last_name);
-          default:
-            return 0;
-        }
-      });
-    setFilteredUsers(filtered);
-  }, [searchQuery, users, sortBy]);
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (modalRef.current && !modalRef.current.contains(event.target)) {
-        setShowRoleModal(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const handleManageRoles = async (user) => {
-    try {
-      setSelectedUser(user);  // Set the selected user first
-      setUserRoles(user.roles || []);  // Initialize with user's current roles
-      setShowRoleModal(true);
-    } catch (err) {
-      console.error('Error managing user roles:', err);
-      setError('Failed to manage user roles. Please try again.');
-    }
-  };
-
-  const handleRoleToggle = (role) => {
-    setUserRoles(prevRoles => {
-      const hasRole = prevRoles.some(r => r.role_id === role.role_id);
-      if (hasRole) {
-        return prevRoles.filter(r => r.role_id !== role.role_id);
-      } else {
-        return [...prevRoles, role];
-      }
-    });
-  };
-
-  const handleSaveRoles = async () => {
-    if (!selectedUser || !token) return;
-
-    try {
-      const roleChanges = {
-        add: userRoles
-          .filter(role => !selectedUser.roles.some(r => r.role_id === role.role_id))
-          .map(role => role.role_id),
-        remove: selectedUser.roles
-          .filter(role => !userRoles.some(r => r.role_id === role.role_id))
-          .map(role => role.role_id)
-      };
-
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/users/${selectedUser.user_id}/roles/batch`,
-        {
+      if (JSON.stringify(editedUser.roles) !== JSON.stringify(selectedUser.roles.map(r => r.id))) {
+        const rolesRes = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/users/${selectedUser.id}/roles`, {
           method: 'PUT',
           headers: {
-            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify(roleChanges),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to update roles');
+          body: JSON.stringify({ role_ids: editedUser.roles }),
+        });
+        if (!rolesRes.ok) throw new Error('Failed to update user roles');
       }
 
-      // Refresh the users list to show updated roles
-      await loadData();
-      setShowRoleModal(false);
+      // Update local state with the new roles
+      const updatedRoles = roles.filter(r => editedUser.roles.includes(r.id || r.role_id));
+      
+      // Create a new user object with the updated roles
+      const updatedUser = {
+        ...selectedUser,
+        is_active: editedUser.is_active,
+        roles: updatedRoles
+      };
+      
+      // Update the users state with the new user data
+      const updatedUsers = users.map(u =>
+        u.id === selectedUser.id ? updatedUser : u
+      );
+      
+      setUsers(updatedUsers);
+
+      // If the edited user is the current user, refresh user data
+      if (selectedUser.id === currentUser.id) {
+        await refreshUserData();
+      }
+
+      setShowEditModal(false);
       setSelectedUser(null);
-      setUserRoles([]);
+      setEditedUser({ email: '', is_active: true, roles: [] });
     } catch (err) {
-      console.error('Error saving roles:', err);
-      setError('Failed to save role changes. Please try again.');
+      setError(err.message);
     }
   };
 
-  const formatRoleName = (name) => {
-    // Split by spaces, underscores, or hyphens
-    return name
-      .split(/[\s_-]/)
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(' ');
+  const handleDeleteUser = async () => {
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/users/${selectedUser.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Failed to delete user');
+      
+      // Update local state
+      setUsers(users.filter(u => u.id !== selectedUser.id));
+      setShowDeleteModal(false);
+      setSelectedUser(null);
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
-  if (loading) {
+  const formatUserName = (user) => {
+    return `${user.first_name} ${user.last_name}`.trim() || 'Unnamed User';
+  };
+
+  // Update the role selection handler
+  const handleRoleChange = (role, checked) => {
+    const roleId = role?.id || role?.role_id;
+    if (!roleId) return; // Skip if no valid role ID
+
+    const newRoles = checked
+      ? [...editedUser.roles, roleId]
+      : editedUser.roles.filter(id => id !== roleId);
+    
+    setEditedUser(prev => ({
+      ...prev,
+      roles: newRoles
+    }));
+  };
+
+  // Render user roles
+  const renderUserRoles = (user) => {
+    if (!Array.isArray(user.roles)) {
+      return null;
+    }
+    return user.roles.map((role, index) => (
+      <span
+        key={`user-${user.id}-role-${role?.id || role?.role_id || index}`}
+        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+      >
+        {(role?.name || 'Unnamed Role').split(' ')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+          .join(' ')}
+      </span>
+    ));
+  };
+
+  // Update the role selection section in the edit modal
+  const renderRoleSelection = () => {
+    const assignableRoles = getAssignableRoles();
+    
     return (
-      <div className="flex justify-center items-center min-h-screen">
+      <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
+        <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-4">User Roles</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {assignableRoles.map((role, index) => (
+            <label
+              key={`edit-role-${role?.id || role?.role_id || index}`}
+              className="relative flex items-start p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600/50 cursor-pointer transition-colors"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={editedUser.roles.includes(role?.id || role?.role_id)}
+                    onChange={(e) => handleRoleChange(role, e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600"
+                  />
+                  <span className="ml-3 text-sm font-medium text-gray-900 dark:text-white">
+                    {(role?.name || 'Unnamed Role').split(' ')
+                      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                      .join(' ')}
+                  </span>
+                </div>
+                {role?.description && (
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {role.description.charAt(0).toUpperCase() + role.description.slice(1)}
+                  </p>
+                )}
+              </div>
+            </label>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
       </div>
     );
@@ -218,143 +274,334 @@ function UserManagement() {
 
   if (error) {
     return (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="text-red-500 text-xl">{error}</div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+          <strong className="font-bold">Error!</strong>
+          <span className="block sm:inline"> {error}</span>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-8 text-gray-900 dark:text-white">User Management</h1>
-      
-      {/* Sticky Search and Sort Bar */}
-      <div className="sticky top-16 z-10 bg-white dark:bg-gray-800 shadow-lg rounded-lg p-4 mb-6">
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1">
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Search users..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-              />
-              <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-                <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto">
+        <div className="bg-white dark:bg-gray-800 shadow-lg rounded-lg overflow-hidden">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-gray-200 to-gray-300 dark:from-blue-900 dark:to-blue-950 px-6 py-8">
+            <div className="flex justify-between items-center">
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  User Management
+                </h1>
+                <p className="text-gray-700 dark:text-blue-200 mt-2">
+                  Manage system users and their roles
+                </p>
               </div>
+              <button
+                onClick={handleRefresh}
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <svg className="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh
+              </button>
             </div>
           </div>
-          <div className="flex items-center">
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value={SORT_OPTIONS.ALPHA_ASC}>Name (A to Z)</option>
-              <option value={SORT_OPTIONS.ALPHA_DESC}>Name (Z to A)</option>
-            </select>
+
+          {/* Content */}
+          <div className="p-6">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-700">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Name
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Email
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Roles
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                  {users.map((user) => (
+                    <tr key={user.id}>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900 dark:text-white">
+                          {formatUserName(user)}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-500 dark:text-gray-300">
+                          {user.email}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex flex-wrap gap-1">
+                          {renderUserRoles(user)}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            user.is_active
+                              ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                              : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                          }`}
+                        >
+                          {user.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        {user.id !== currentUser.id && canEditUser(user) && (
+                          <button
+                            onClick={() => {
+                              setSelectedUser(user);
+                              setEditedUser({
+                                email: user.email,
+                                is_active: user.is_active,
+                                roles: user.roles.map(r => r.id)
+                              });
+                              setShowEditModal(true);
+                            }}
+                            className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                          >
+                            Edit
+                          </button>
+                        )}
+                        {user.id !== currentUser.id && !canEditUser(user) && (
+                          <span className="text-gray-400 dark:text-gray-500">
+                            Cannot edit
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 shadow-lg rounded-lg overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-          <thead className="bg-gray-50 dark:bg-gray-700">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                Name
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                Email
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                Roles
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-            {filteredUsers.map((user) => (
-              <tr key={user.user_id}>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                  {user.first_name} {user.last_name}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                  {user.email}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  <div className="flex flex-wrap gap-1">
-                    {user.roles?.map((role) => (
-                      <span
-                        key={role.name}
-                        className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-                      >
-                        {formatRoleName(role.name)}
-                      </span>
-                    ))}
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                  <button
-                    onClick={() => handleManageRoles(user)}
-                    className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
-                  >
-                    Manage Roles
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Role Management Modal */}
-      {showRoleModal && selectedUser && (
-        <DraggableModal
-          isOpen={showRoleModal}
-          onClose={() => {
-            setShowRoleModal(false);
-            setSelectedUser(null);
-            setUserRoles([]);
+      {/* Edit Modal */}
+      {showEditModal && (
+        <div 
+          className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center p-4 z-50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowEditModal(false);
+              setSelectedUser(null);
+              setEditedUser({
+                email: '',
+                is_active: true,
+                roles: []
+              });
+            }
           }}
         >
-          <div className="p-6">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-              Manage Roles for {selectedUser.first_name} {selectedUser.last_name}
-            </h2>
-            <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
-              {roles.map((role) => (
-                <label key={role.role_id} className="flex items-center space-x-3 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md">
-                  <input
-                    type="checkbox"
-                    checked={userRoles.some(r => r.role_id === role.role_id)}
-                    onChange={() => handleRoleToggle(role)}
-                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                  />
-                  <span className="text-gray-700 dark:text-gray-300">
-                    {formatRoleName(role.name)}
-                  </span>
-                </label>
-              ))}
-            </div>
-            <div className="mt-6 flex justify-end">
-              <button
-                onClick={handleSaveRoles}
-                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md"
-              >
-                Save Changes
-              </button>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg transform transition-all">
+            <div className="p-8">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  Manage User
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setSelectedUser(null);
+                    setEditedUser({
+                      email: '',
+                      is_active: true,
+                      roles: []
+                    });
+                  }}
+                  className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 transition-colors"
+                >
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* User Info Card */}
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
+                  <div className="flex items-center space-x-4">
+                    <div className="flex-shrink-0">
+                      <div className="h-12 w-12 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                        <span className="text-xl font-semibold text-blue-600 dark:text-blue-300">
+                          {editedUser.email.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                        {editedUser.email}
+                      </p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        User ID: {selectedUser?.id}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Status Toggle */}
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-900 dark:text-white">Account Status</h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        {editedUser.is_active ? 'User can access the system' : 'User access is restricted'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setEditedUser({ ...editedUser, is_active: !editedUser.is_active });
+                      }}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                        editedUser.is_active ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-600'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          editedUser.is_active ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Roles Section */}
+                {renderRoleSelection()}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="mt-8 flex justify-end space-x-3">
+                <button
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setSelectedUser(null);
+                    setEditedUser({
+                      email: '',
+                      is_active: true,
+                      roles: []
+                    });
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => setShowConfirmationModal(true)}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  Save Changes
+                </button>
+              </div>
             </div>
           </div>
-        </DraggableModal>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {showConfirmationModal && (
+        <div 
+          className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center p-4 z-50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowConfirmationModal(false);
+            }
+          }}
+        >
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md transform transition-all">
+            <div className="p-8">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  Confirm Changes
+                </h2>
+                <button
+                  onClick={() => setShowConfirmationModal(false)}
+                  className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 transition-colors"
+                >
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
+                  <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Changes Summary</h3>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-600 dark:text-gray-400">Account Status</span>
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        editedUser.is_active
+                          ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                          : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                      }`}>
+                        {editedUser.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-sm text-gray-600 dark:text-gray-400">Selected Roles</span>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {editedUser.roles.length > 0 ? (
+                          roles
+                            .filter(role => editedUser.roles.includes(role?.id || role?.role_id))
+                            .map((role, index) => (
+                              <span
+                                key={`selected-role-${role?.id || role?.role_id || index}`}
+                                className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                              >
+                                {(role?.name || 'Unnamed Role').split(' ')
+                                  .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                                  .join(' ')}
+                              </span>
+                            ))
+                        ) : (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                            No Roles
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-8 flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowConfirmationModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    handleEditUser();
+                    setShowConfirmationModal(false);
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  Confirm Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
 }
-
-export default UserManagement; 
