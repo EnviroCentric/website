@@ -7,7 +7,8 @@ import Login from '../pages/Login';
 import Register from '../pages/Register';
 
 const navigation = [
-  { name: "Home", href: "/", current: true }
+  { name: "Home", href: "/", current: true },
+  { name: "Projects", href: "/projects", current: false }
 ];
 
 const userMenuOptions = [
@@ -31,6 +32,7 @@ export default function Navbar() {
     transform: 'translate(0, 0)',
   });
 
+  const isHomePage = location.pathname === '/';
   const isSuperuser = user?.is_superuser || user?.roles?.some(role => role.name.toLowerCase() === 'admin');
 
   const getUserInitials = () => {
@@ -70,23 +72,33 @@ export default function Navbar() {
 
   useEffect(() => {
     const handleScroll = () => {
-      const scrollPosition = window.scrollY;
-      const maxScroll = 400;
-      
-      const progress = Math.min(1, scrollPosition / maxScroll);
-      // Start appearing when progress is > 0.7 (70% scrolled)
-      const adjustedProgress = Math.max(0, (progress - 0.7) / 0.3);
-      const opacity = Math.min(1, adjustedProgress * 1.5);
+      if (isHomePage) {
+        const scrollPosition = window.scrollY;
+        const maxScroll = 400;
+        
+        const progress = Math.min(1, scrollPosition / maxScroll);
+        // Start appearing when progress is > 0.7 (70% scrolled)
+        const adjustedProgress = Math.max(0, (progress - 0.7) / 0.3);
+        const opacity = Math.min(1, adjustedProgress * 1.5);
 
-      setNavbarStyle({
-        opacity,
-        transform: 'translate(0, 0)',
-      });
+        setNavbarStyle({
+          opacity,
+          transform: 'translate(0, 0)',
+        });
+      } else {
+        // Always show logo on non-home pages
+        setNavbarStyle({
+          opacity: 1,
+          transform: 'translate(0, 0)',
+        });
+      }
     };
 
     window.addEventListener('scroll', handleScroll);
+    // Set initial state
+    handleScroll();
     return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  }, [isHomePage]);
 
   const handleThemeToggle = () => {
     toggleTheme();

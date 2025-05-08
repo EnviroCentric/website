@@ -240,4 +240,19 @@ async def remove_technician(
     await db.execute(
         queries.remove_technician,
         project_id, user_id
-    ) 
+    )
+
+async def list_projects(
+    db: Pool,
+    current_user_id: int
+) -> List[ProjectInDB]:
+    """List all projects accessible to the user."""
+    role_level = await get_user_role_level(db, current_user_id)
+    
+    if role_level >= 80:  # Supervisor or higher can see all projects
+        projects = await db.fetch(queries.list_projects)
+    else:
+        # Regular users can only see their assigned projects
+        projects = await db.fetch(queries.list_technician_projects, current_user_id)
+    
+    return [ProjectInDB(**project) for project in projects] 

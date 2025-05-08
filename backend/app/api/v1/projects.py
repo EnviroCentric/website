@@ -79,4 +79,12 @@ async def remove_technician(
     current_user: dict = Depends(get_current_user)
 ):
     """Remove a technician from a project. Requires supervisor role or higher."""
-    await project_service.remove_technician(db, project_id, user_id, current_user["id"]) 
+    await project_service.remove_technician(db, project_id, user_id, current_user["id"])
+
+@router.get("/", response_model=list[ProjectInDB])
+async def list_projects(
+    db: Pool = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """List all projects accessible to the current user."""
+    return await project_service.list_projects(db, current_user["id"]) 
