@@ -2,13 +2,15 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { useRoles } from '../context/RolesContext';
 import logo from '../assets/logo.png';
 import Login from '../pages/Login';
 import Register from '../pages/Register';
 
 const navigation = [
   { name: "Home", href: "/", current: true },
-  { name: "Projects", href: "/projects", current: false }
+  { name: "Dashboard", href: "/dashboard", current: false, requiresTechnician: true },
+  { name: "Projects", href: "/projects", current: false, requiresSupervisor: true }
 ];
 
 const userMenuOptions = [
@@ -19,6 +21,7 @@ const userMenuOptions = [
 
 export default function Navbar() {
   const { isAuthenticated, logout, user } = useAuth();
+  const { roles } = useRoles();
   const { isDarkMode, toggleTheme } = useTheme();
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
@@ -34,6 +37,8 @@ export default function Navbar() {
 
   const isHomePage = location.pathname === '/';
   const isSuperuser = user?.is_superuser || user?.roles?.some(role => role.name.toLowerCase() === 'admin');
+  const userRoleLevel = Math.max(...(user?.roles?.map(role => role.level) || [0]));
+  const isTechnicianOrHigher = userRoleLevel >= 50; // Technician level is 50
 
   const getUserInitials = () => {
     if (!user?.first_name && !user?.last_name) return null;
@@ -144,19 +149,29 @@ export default function Navbar() {
               {/* Navigation Links */}
               <div className="hidden md:block">
                 <div className="ml-2 flex items-center space-x-4">
-                  {navigation.map((item) => (
-                    <Link
-                      key={item.name}
-                      to={item.href}
-                      className={`${
-                        item.current
-                          ? 'bg-gray-900 text-white'
-                          : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                      } px-3 py-2 rounded-md text-sm font-medium`}
-                    >
-                      {item.name}
-                    </Link>
-                  ))}
+                  {navigation
+                    .filter(item => {
+                      if (item.requiresSupervisor) {
+                        return userRoleLevel >= 80; // Supervisor level is 80
+                      }
+                      if (item.requiresTechnician) {
+                        return userRoleLevel >= 50; // Technician level is 50
+                      }
+                      return true;
+                    })
+                    .map((item) => (
+                      <Link
+                        key={item.name}
+                        to={item.href}
+                        className={`${
+                          item.current
+                            ? 'bg-gray-900 text-white'
+                            : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                        } px-3 py-2 rounded-md text-sm font-medium`}
+                      >
+                        {item.name}
+                      </Link>
+                    ))}
                 </div>
               </div>
             </div>

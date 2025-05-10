@@ -8,6 +8,7 @@ from app.schemas.project import (
     AddressCreate, AddressUpdate, AddressInDB,
     ProjectTechnicianAssign, ProjectTechnicianRemove
 )
+from app.schemas.user import UserInDB
 from app.services import projects as project_service
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -80,6 +81,15 @@ async def remove_technician(
 ):
     """Remove a technician from a project. Requires supervisor role or higher."""
     await project_service.remove_technician(db, project_id, user_id, current_user["id"])
+
+@router.get("/{project_id}/technicians", response_model=list[UserInDB])
+async def get_project_technicians(
+    project_id: int,
+    db: Pool = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get all technicians assigned to a project. Requires technician role or higher."""
+    return await project_service.get_project_technicians(db, project_id, current_user["id"])
 
 @router.get("/", response_model=list[ProjectInDB])
 async def list_projects(

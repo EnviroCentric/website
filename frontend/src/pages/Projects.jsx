@@ -22,10 +22,13 @@ export default function Projects() {
   const isSupervisorOrHigher = userRoleLevel >= 80; // Supervisor level is 80
 
   useEffect(() => {
-    fetchProjects();
-    if (isSupervisorOrHigher) {
-      fetchTechnicians();
+    // Redirect technicians to dashboard
+    if (!isSupervisorOrHigher) {
+      navigate('/dashboard');
+      return;
     }
+    fetchProjects();
+    fetchTechnicians();
   }, []);
 
   const fetchProjects = async () => {
@@ -57,6 +60,14 @@ export default function Projects() {
       .join(' ');
   };
 
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const yyyy = date.getFullYear();
+    return `${mm}/${dd}/${yyyy}`;
+  };
+
   const handleCreateProject = async (e) => {
     e.preventDefault();
     try {
@@ -65,7 +76,10 @@ export default function Projects() {
         name: capitalizedName,
         technicians: selectedTechnicians
       });
-      setProjects([...projects, response.data]);
+      
+      // Refresh the projects list to get the updated data
+      await fetchProjects();
+      
       setIsCreateModalOpen(false);
       setNewProjectName('');
       setSelectedTechnicians([]);
@@ -130,7 +144,7 @@ export default function Projects() {
                 {capitalizeProjectName(project.name)}
               </h3>
               <p className="text-gray-500 dark:text-gray-400">
-                Created: {new Date(project.created_at).toLocaleDateString()}
+                Created: {formatDate(project.created_at)}
               </p>
               {project.addresses && project.addresses.length > 0 && (
                 <p className="text-gray-500 dark:text-gray-400 mt-2">

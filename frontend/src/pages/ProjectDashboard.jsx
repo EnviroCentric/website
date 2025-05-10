@@ -1,24 +1,41 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useRoles } from '../context/RolesContext';
 import api from '../services/api';
+import Modal from '../components/Modal';
 
 export default function ProjectDashboard() {
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [availableTechnicians, setAvailableTechnicians] = useState([]);
+  const [selectedTechnicians, setSelectedTechnicians] = useState([]);
+  const [assignedTechnicians, setAssignedTechnicians] = useState([]);
   const { projectId } = useParams();
   const { user } = useAuth();
+  const { roles } = useRoles();
   const navigate = useNavigate();
+
+  // Get the highest role level from user's roles
+  const userRoleLevel = Math.max(...(user?.roles?.map(role => role.level) || [0]));
+  const isSupervisorOrHigher = userRoleLevel >= 80; // Supervisor level is 80
 
   useEffect(() => {
     fetchProjectDetails();
+    if (isSupervisorOrHigher) {
+      fetchTechnicians();
+    }
   }, [projectId]);
 
   const fetchProjectDetails = async () => {
     try {
       const response = await api.get(`/api/v1/projects/${projectId}`);
       setProject(response.data);
+      // Get assigned technicians
+      const techResponse = await api.get(`/api/v1/projects/${projectId}/technicians`);
+      setAssignedTechnicians(techResponse.data);
     } catch (err) {
       setError('Failed to fetch project details');
       console.error('Error fetching project details:', err);
@@ -26,6 +43,67 @@ export default function ProjectDashboard() {
       setLoading(false);
     }
   };
+
+  const fetchTechnicians = async () => {
+    try {
+      // Get users with role level >= 50 (technician level)
+      const response = await api.get('/api/v1/users?min_role_level=50');
+      setAvailableTechnicians(response.data);
+    } catch (err) {
+      console.error('Error fetching technicians:', err);
+    }
+  };
+
+  const handleAssignTechnicians = async () => {
+    try {
+      // Get currently assigned technician IDs
+      const currentAssignedIds = assignedTechnicians.map(tech => tech.id);
+      
+      // Find technicians to add (selected but not currently assigned)
+      const techniciansToAdd = selectedTechnicians.filter(id => !currentAssignedIds.includes(id));
+      
+      // Find technicians to remove (currently assigned but not selected)
+      const techniciansToRemove = currentAssignedIds.filter(id => !selectedTechnicians.includes(id));
+      
+      // Add new technicians
+      for (const techId of techniciansToAdd) {
+        await api.post(`/api/v1/projects/${projectId}/technicians`, {
+          user_id: techId
+        });
+      }
+      
+      // Remove unselected technicians
+      for (const techId of techniciansToRemove) {
+        await api.delete(`/api/v1/projects/${projectId}/technicians/${techId}`);
+      }
+      
+      // Refresh project details to get updated technician list
+      await fetchProjectDetails();
+      setIsAssignModalOpen(false);
+      setSelectedTechnicians([]);
+    } catch (err) {
+      setError('Failed to assign technicians');
+      console.error('Error assigning technicians:', err);
+    }
+  };
+
+  const handleUnassignTechnician = async (userId) => {
+    try {
+      await api.delete(`/api/v1/projects/${projectId}/technicians/${userId}`);
+      // Refresh project details to get updated technician list
+      await fetchProjectDetails();
+    } catch (err) {
+      setError('Failed to unassign technician');
+      console.error('Error unassigning technician:', err);
+    }
+  };
+
+  // Update selected technicians when modal opens
+  useEffect(() => {
+    if (isAssignModalOpen) {
+      setSelectedTechnicians(assignedTechnicians.map(tech => tech.id));
+    }
+  }, [isAssignModalOpen, assignedTechnicians]);
 
   const handleAction = (action) => {
     // These functions will be implemented later
@@ -92,12 +170,24 @@ export default function ProjectDashboard() {
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
-          {project.name}
-        </h1>
-        <p className="text-gray-500 dark:text-gray-400">
-          Created: {new Date(project.created_at).toLocaleDateString()}
-        </p>
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+              {project.name}
+            </h1>
+            <p className="text-gray-500 dark:text-gray-400">
+              Created: {new Date(project.created_at).toLocaleDateString()}
+            </p>
+          </div>
+          {isSupervisorOrHigher && (
+            <button
+              onClick={() => setIsAssignModalOpen(true)}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            >
+              Manage Technicians
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -160,6 +250,61 @@ export default function ProjectDashboard() {
           </div>
         </div>
       )}
+
+      <Modal
+        isOpen={isAssignModalOpen}
+        onClose={() => setIsAssignModalOpen(false)}
+      >
+        <div className="space-y-6">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+            Manage Technicians
+          </h2>
+          
+          <div>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+              Assign Technicians
+            </h3>
+            <div className="space-y-3">
+              {availableTechnicians.map((tech) => (
+                <label key={tech.id} className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={selectedTechnicians.includes(tech.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedTechnicians([...selectedTechnicians, tech.id]);
+                      } else {
+                        setSelectedTechnicians(selectedTechnicians.filter(id => id !== tech.id));
+                      }
+                    }}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="ml-3 text-gray-700 dark:text-gray-300">
+                    {tech.first_name} {tech.last_name}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4">
+            <button
+              type="button"
+              onClick={() => setIsAssignModalOpen(false)}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleAssignTechnicians}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              Save Changes
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 } 

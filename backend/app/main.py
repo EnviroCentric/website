@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 from app.core.config import settings
-from app.api.v1 import auth, users, roles, projects
+from app.api.v1 import auth, users, roles, projects, samples
 from app.startup import startup
 from app.db.session import get_db
 from app.db.queries.manager import query_manager
@@ -37,6 +37,7 @@ app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth")
 app.include_router(users.router, prefix=settings.API_V1_STR)
 app.include_router(roles.router, prefix=settings.API_V1_STR)
 app.include_router(projects.router, prefix=settings.API_V1_STR)
+app.include_router(samples.router, prefix=settings.API_V1_STR)
 
 @app.on_event("startup")
 async def startup_event():
