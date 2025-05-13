@@ -56,6 +56,17 @@ WHERE a.id = ANY(
 )
 ORDER BY a.date DESC;
 
+-- name: get_project_addresses_by_date
+SELECT a.*
+FROM addresses a
+WHERE a.id = ANY(
+    SELECT unnest(address_ids)
+    FROM projects
+    WHERE id = $1
+)
+AND a.date = $2
+ORDER BY a.date DESC;
+
 -- Project Technician queries
 -- name: assign_technician
 INSERT INTO project_technicians (project_id, user_id)
@@ -78,4 +89,11 @@ SELECT EXISTS(
     SELECT 1 
     FROM project_technicians 
     WHERE project_id = $1 AND user_id = $2
-) as is_assigned; 
+) as is_assigned;
+
+-- name: check_address_in_project
+SELECT EXISTS(
+    SELECT 1
+    FROM projects
+    WHERE id = $1 AND $2 = ANY(address_ids)
+) as is_project_address; 

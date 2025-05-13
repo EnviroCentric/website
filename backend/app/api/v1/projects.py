@@ -1,5 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from asyncpg.pool import Pool
+from typing import List, Optional
+from datetime import date
 
 from app.core.security import get_current_user
 from app.db.session import get_db
@@ -97,4 +99,25 @@ async def list_projects(
     current_user: dict = Depends(get_current_user)
 ):
     """List all projects accessible to the current user."""
-    return await project_service.list_projects(db, current_user["id"]) 
+    return await project_service.list_projects(db, current_user["id"])
+
+@router.get("/{project_id}/addresses", response_model=List[AddressInDB])
+async def get_addresses_for_date(
+    project_id: int,
+    date: Optional[date] = Query(None),
+    db: Pool = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get addresses for a project, optionally filtered by date."""
+    addresses = await project_service.get_addresses_for_project(db, project_id, date, current_user["id"])
+    return addresses
+
+@router.get("/{project_id}/addresses/{address_id}", response_model=AddressInDB)
+async def get_address(
+    project_id: int,
+    address_id: int,
+    db: Pool = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get a single address by ID. Requires technician role or higher."""
+    return await project_service.get_address(db, project_id, address_id, current_user["id"]) 

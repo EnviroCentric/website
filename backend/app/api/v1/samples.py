@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from asyncpg.pool import Pool
 
 from app.core.security import get_current_user
@@ -8,6 +8,7 @@ from app.services import samples as sample_service
 
 router = APIRouter(prefix="/samples", tags=["samples"])
 
+@router.post("", response_model=SampleInDB)
 @router.post("/", response_model=SampleInDB)
 async def create_sample(
     sample: SampleCreate,
@@ -48,12 +49,14 @@ async def delete_sample(
 @router.get("/address/{address_id}", response_model=list[SampleInDB])
 async def get_samples_by_address(
     address_id: int,
+    date: str = Query(None, description="Filter samples by date (YYYY-MM-DD)"),
     db: Pool = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
     """Get all samples for an address. Requires technician role or higher."""
-    return await sample_service.get_samples_by_address(db, address_id, current_user["id"])
+    return await sample_service.get_samples_by_address(db, address_id, current_user["id"], date)
 
+@router.get("", response_model=list[SampleInDB])
 @router.get("/", response_model=list[SampleInDB])
 async def list_samples(
     db: Pool = Depends(get_db),

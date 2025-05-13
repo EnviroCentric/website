@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta
 from typing import Optional
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ValidationInfo
 
 class SampleBase(BaseModel):
     address_id: int
+    description: str = Field(..., min_length=1, max_length=255)
 
 class SampleCreate(SampleBase):
     pass
@@ -19,9 +20,10 @@ class SampleUpdate(BaseModel):
     fibers: Optional[int] = Field(None, ge=0)
 
     @field_validator('stop_time')
-    def validate_stop_time(cls, v, values):
-        if v and 'start_time' in values and values['start_time']:
-            if v < values['start_time']:
+    @classmethod
+    def validate_stop_time(cls, v: Optional[datetime], info: ValidationInfo) -> Optional[datetime]:
+        if v and 'start_time' in info.data and info.data['start_time']:
+            if v < info.data['start_time']:
                 raise ValueError('stop_time must be after start_time')
         return v
 

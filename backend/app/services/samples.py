@@ -22,7 +22,7 @@ async def create_sample(
         )
     
     # Create the sample
-    result = await db.fetchrow(queries.create_sample, sample.address_id)
+    result = await db.fetchrow(queries.create_sample, sample.address_id, sample.description)
     if not result:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -116,9 +116,10 @@ async def delete_sample(
 async def get_samples_by_address(
     db: Pool,
     address_id: int,
-    current_user_id: int
+    current_user_id: int,
+    date: str = None
 ) -> List[SampleInDB]:
-    """Get all samples for an address."""
+    """Get all samples for an address, optionally filtered by date."""
     # Check if user has technician role or higher
     role_level = await get_user_role_level(db, current_user_id)
     if role_level < 50:  # Technician level
@@ -126,9 +127,10 @@ async def get_samples_by_address(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only technicians and higher roles can view samples"
         )
-    
-    # Get the samples
-    results = await db.fetch(queries.get_samples_by_address, address_id)
+    if date:
+        results = await db.fetch(queries.get_samples_by_address_and_date, address_id, date)
+    else:
+        results = await db.fetch(queries.get_samples_by_address, address_id)
     return [SampleInDB(**result) for result in results]
 
 async def list_samples(

@@ -106,10 +106,9 @@ export default function ProjectDashboard() {
   }, [isAssignModalOpen, assignedTechnicians]);
 
   const handleAction = (action) => {
-    // These functions will be implemented later
     switch (action) {
       case 'collect':
-        console.log('Collect samples functionality to be implemented');
+        navigate(`/projects/${projectId}/collect-samples`);
         break;
       case 'analyze':
         console.log('Analyze samples functionality to be implemented');

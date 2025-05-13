@@ -1,11 +1,14 @@
 -- name: create_sample
-INSERT INTO samples (address_id) VALUES ($1) RETURNING *;
+INSERT INTO samples (address_id, description) VALUES ($1, $2) RETURNING *;
 
 -- name: get_sample
 SELECT * FROM samples WHERE id = $1;
 
 -- name: get_samples_by_address
 SELECT * FROM samples WHERE address_id = $1 ORDER BY created_at DESC;
+
+-- name: get_samples_by_address_and_date
+SELECT * FROM samples WHERE address_id = $1 AND DATE(created_at) = $2 ORDER BY created_at DESC;
 
 -- name: update_sample
 UPDATE samples

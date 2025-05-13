@@ -373,4 +373,76 @@ async def get_projects(
     # Apply pagination
     projects = projects[skip:skip + limit]
 
-    return [ProjectInDB(**project) for project in projects] 
+    return [ProjectInDB(**project) for project in projects]
+
+async def get_addresses_for_project(db: Pool, project_id: int, date: Optional[date], current_user_id: int) -> List[AddressInDB]:
+    # Check access as in get_project
+    is_assigned = await db.fetchval(
+        queries.check_technician_assigned,
+        project_id, current_user_id
+    )
+    role_level = await get_user_role_level(db, current_user_id)
+    
+    if not is_assigned and role_level < 80:  # Supervisor level
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this project"
+        )
+    
+    # Get addresses for the project
+    addresses = await db.fetch(
+        queries.get_project_addresses,
+        project_id
+    )
+    
+    # Filter by date if provided
+    if date:
+        addresses = [addr for addr in addresses if addr["date"] == date]
+    
+    return [AddressInDB(**addr) for addr in addresses]
+
+async def get_address(
+    db: Pool,
+    project_id: int,
+    address_id: int,
+    current_user_id: int
+) -> AddressInDB:
+    """Get a single address by ID. Requires technician role or higher."""
+    # Check if user has access to the project
+    is_assigned = await db.fetchval(
+        queries.check_technician_assigned,
+        project_id, current_user_id
+    )
+    role_level = await get_user_role_level(db, current_user_id)
+    
+    if not is_assigned and role_level < 50:  # Technician level
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this project"
+        )
+    
+    # Get the address
+    address = await db.fetchrow(
+        queries.get_address,
+        address_id
+    )
+    
+    if not address:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Address not found"
+        )
+    
+    # Verify the address belongs to the project
+    is_project_address = await db.fetchval(
+        queries.check_address_in_project,
+        project_id, address_id
+    )
+    
+    if not is_project_address:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Address not found in this project"
+        )
+    
+    return AddressInDB(**address) 
