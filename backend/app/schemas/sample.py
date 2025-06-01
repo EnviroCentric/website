@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, field_validator, ValidationInfo
 class SampleBase(BaseModel):
     address_id: int
     description: str = Field(..., min_length=1, max_length=255)
+    cassette_barcode: str = Field(..., min_length=1)
 
 class SampleCreate(SampleBase):
     pass
@@ -18,6 +19,7 @@ class SampleUpdate(BaseModel):
     stop_time: Optional[datetime] = None
     fields: Optional[int] = Field(None, ge=0)
     fibers: Optional[int] = Field(None, ge=0)
+    cassette_barcode: Optional[str] = None
 
     @field_validator('stop_time')
     @classmethod
@@ -39,6 +41,7 @@ class SampleInDB(SampleBase):
     fields: Optional[int] = None
     fibers: Optional[int] = None
     created_at: datetime
+    cassette_barcode: str
 
     class Config:
         from_attributes = True 

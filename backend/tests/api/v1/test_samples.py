@@ -17,7 +17,10 @@ async def test_create_sample_success(client: AsyncClient, technician_token_heade
     address_id = address_response.json()["id"]
 
     # Create sample
-    sample_data = {"address_id": address_id}
+    sample_data = {
+        "address_id": address_id,
+        "description": "Test sample description"
+    }
     response = await client.post("/api/v1/samples/", json=sample_data, headers=technician_token_headers)
     assert response.status_code == 200
     data = response.json()
@@ -27,7 +30,10 @@ async def test_create_sample_success(client: AsyncClient, technician_token_heade
 
 async def test_create_sample_unauthorized(client: AsyncClient, normal_user_token_headers):
     """Test creating a sample without proper authorization."""
-    sample_data = {"address_id": 1}
+    sample_data = {
+        "address_id": 1,
+        "description": "Test sample description"
+    }
     response = await client.post("/api/v1/samples/", json=sample_data, headers=normal_user_token_headers)
     assert response.status_code == 403
 
@@ -42,7 +48,10 @@ async def test_get_sample_success(client: AsyncClient, technician_token_headers)
     address_response = await client.post(f"/api/v1/projects/{project_id}/addresses", json=address_data, headers=technician_token_headers)
     address_id = address_response.json()["id"]
 
-    sample_data = {"address_id": address_id}
+    sample_data = {
+        "address_id": address_id,
+        "description": "Test sample description"
+    }
     create_response = await client.post("/api/v1/samples/", json=sample_data, headers=technician_token_headers)
     sample_id = create_response.json()["id"]
 
@@ -69,7 +78,10 @@ async def test_update_sample_success(client: AsyncClient, technician_token_heade
     address_response = await client.post(f"/api/v1/projects/{project_id}/addresses", json=address_data, headers=technician_token_headers)
     address_id = address_response.json()["id"]
 
-    sample_data = {"address_id": address_id}
+    sample_data = {
+        "address_id": address_id,
+        "description": "Test sample description"
+    }
     create_response = await client.post("/api/v1/samples/", json=sample_data, headers=technician_token_headers)
     sample_id = create_response.json()["id"]
 
@@ -103,7 +115,10 @@ async def test_update_sample_invalid_data(client: AsyncClient, technician_token_
     address_response = await client.post(f"/api/v1/projects/{project_id}/addresses", json=address_data, headers=technician_token_headers)
     address_id = address_response.json()["id"]
 
-    sample_data = {"address_id": address_id}
+    sample_data = {
+        "address_id": address_id,
+        "description": "Test sample description"
+    }
     create_response = await client.post("/api/v1/samples/", json=sample_data, headers=technician_token_headers)
     sample_id = create_response.json()["id"]
 
@@ -126,7 +141,10 @@ async def test_delete_sample_success(client: AsyncClient, admin_token_headers):
     address_response = await client.post(f"/api/v1/projects/{project_id}/addresses", json=address_data, headers=admin_token_headers)
     address_id = address_response.json()["id"]
 
-    sample_data = {"address_id": address_id}
+    sample_data = {
+        "address_id": address_id,
+        "description": "Test sample description"
+    }
     create_response = await client.post("/api/v1/samples/", json=sample_data, headers=admin_token_headers)
     sample_id = create_response.json()["id"]
 
@@ -149,7 +167,10 @@ async def test_delete_sample_unauthorized(client: AsyncClient, technician_token_
     address_response = await client.post(f"/api/v1/projects/{project_id}/addresses", json=address_data, headers=technician_token_headers)
     address_id = address_response.json()["id"]
 
-    sample_data = {"address_id": address_id}
+    sample_data = {
+        "address_id": address_id,
+        "description": "Test sample description"
+    }
     create_response = await client.post("/api/v1/samples/", json=sample_data, headers=technician_token_headers)
     sample_id = create_response.json()["id"]
 
@@ -175,7 +196,10 @@ async def test_get_samples_by_address_success(client: AsyncClient, technician_to
 
     # Create multiple samples
     for i in range(3):
-        sample_data = {"address_id": address_id}
+        sample_data = {
+            "address_id": address_id,
+            "description": f"Test sample description {i}"
+        }
         await client.post("/api/v1/samples/", json=sample_data, headers=technician_token_headers)
 
     # Get samples by address
@@ -199,7 +223,10 @@ async def test_list_samples_success(client: AsyncClient, technician_token_header
 
     # Create multiple samples
     for i in range(3):
-        sample_data = {"address_id": address_id}
+        sample_data = {
+            "address_id": address_id,
+            "description": f"Test sample description {i}"
+        }
         await client.post("/api/v1/samples/", json=sample_data, headers=technician_token_headers)
 
     # List all samples

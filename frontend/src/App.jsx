@@ -14,8 +14,8 @@ import Register from './pages/Register';
 import UserManagement from './pages/UserManagement';
 import Projects from './pages/Projects';
 import ProjectDashboard from './pages/ProjectDashboard';
-import CollectSamplesEntry from './pages/CollectSamplesEntry';
 import SampleCollection from './pages/SampleCollection';
+
 import { RolesProvider } from './context/RolesContext';
 import { PermissionsProvider } from './context/PermissionsContext';
 
@@ -55,15 +55,7 @@ function App() {
                     }
                   />
                   <Route
-                    path="/projects/:projectId/collect-samples"
-                    element={
-                      <ProtectedRoute>
-                        <CollectSamplesEntry />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/projects/:projectId/collect-samples/:addressId"
+                    path="/projects/:projectId/addresses/:addressId/collect-samples"
                     element={
                       <ProtectedRoute>
                         <SampleCollection />

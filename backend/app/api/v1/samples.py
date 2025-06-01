@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from asyncpg.pool import Pool
+from datetime import date as date_type, datetime
 
 from app.core.security import get_current_user
 from app.db.session import get_db
@@ -54,7 +55,13 @@ async def get_samples_by_address(
     current_user: dict = Depends(get_current_user)
 ):
     """Get all samples for an address. Requires technician role or higher."""
-    return await sample_service.get_samples_by_address(db, address_id, current_user["id"], date)
+    date_obj = None
+    if date:
+        try:
+            date_obj = datetime.strptime(date, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid date format, should be YYYY-MM-DD")
+    return await sample_service.get_samples_by_address(db, address_id, current_user["id"], date_obj)
 
 @router.get("", response_model=list[SampleInDB])
 @router.get("/", response_model=list[SampleInDB])

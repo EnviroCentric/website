@@ -1,5 +1,5 @@
 -- name: create_sample
-INSERT INTO samples (address_id, description) VALUES ($1, $2) RETURNING *;
+INSERT INTO samples (address_id, description, cassette_barcode) VALUES ($1, $2, $3) RETURNING *;
 
 -- name: get_sample
 SELECT * FROM samples WHERE id = $1;
@@ -20,7 +20,8 @@ SET
     start_time = COALESCE($6, start_time),
     stop_time = COALESCE($7, stop_time),
     fields = COALESCE($8, fields),
-    fibers = COALESCE($9, fibers)
+    fibers = COALESCE($9, fibers),
+    cassette_barcode = COALESCE($10, cassette_barcode)
 WHERE id = $1
 RETURNING *;
 

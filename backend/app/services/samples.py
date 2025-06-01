@@ -22,7 +22,7 @@ async def create_sample(
         )
     
     # Create the sample
-    result = await db.fetchrow(queries.create_sample, sample.address_id, sample.description)
+    result = await db.fetchrow(queries.create_sample, sample.address_id, sample.description, sample.cassette_barcode)
     if not result:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -81,7 +81,8 @@ async def update_sample(
         sample_update.start_time,
         sample_update.stop_time,
         sample_update.fields,
-        sample_update.fibers
+        sample_update.fibers,
+        sample_update.cassette_barcode
     )
     if not result:
         raise HTTPException(
