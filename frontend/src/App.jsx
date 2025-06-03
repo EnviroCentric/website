@@ -12,6 +12,10 @@ import ProtectedRoute from './routes/ProtectedRoute';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import UserManagement from './pages/UserManagement';
+import Projects from './pages/Projects';
+import ProjectDashboard from './pages/ProjectDashboard';
+import SampleCollection from './pages/SampleCollection';
+
 import { RolesProvider } from './context/RolesContext';
 import { PermissionsProvider } from './context/PermissionsContext';
 
@@ -31,6 +35,30 @@ function App() {
                     element={
                       <ProtectedRoute>
                         <Dashboard />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/projects"
+                    element={
+                      <ProtectedRoute>
+                        <Projects />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/projects/:projectId"
+                    element={
+                      <ProtectedRoute>
+                        <ProjectDashboard />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/projects/:projectId/addresses/:addressId/collect-samples"
+                    element={
+                      <ProtectedRoute>
+                        <SampleCollection />
                       </ProtectedRoute>
                     }
                   />

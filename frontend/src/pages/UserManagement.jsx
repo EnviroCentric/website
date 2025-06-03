@@ -185,7 +185,15 @@ export default function UserManagement() {
   };
 
   const formatUserName = (user) => {
-    return `${user.first_name} ${user.last_name}`.trim() || 'Unnamed User';
+    const firstName = user.first_name ? user.first_name.split(' ').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    ).join(' ') : '';
+    
+    const lastName = user.last_name ? user.last_name.split(' ').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    ).join(' ') : '';
+    
+    return `${firstName} ${lastName}`.trim() || 'Unnamed User';
   };
 
   // Update the role selection handler

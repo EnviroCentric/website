@@ -6,8 +6,7 @@ import {
   login as loginService, 
   register as registerService, 
   getCurrentUser, 
-  logout as logoutService, 
-  refreshToken 
+  logout as logoutService
 } from '../services/auth';
 
 const AuthContext = createContext();
@@ -52,20 +51,12 @@ export function AuthProvider({ children }) {
     if (currentToken && !isTokenExpired(currentToken)) {
       setToken(currentToken);
       fetchUserData();
-    } else if (currentToken) {
-      // Try to refresh the token
-      refreshToken()
-        .then(() => {
-          setToken(getAuthToken());
-          fetchUserData();
-        })
-        .catch(() => {
-          logout();
-          setLoading(false);
-        });
     } else {
       setIsAuthenticated(false);
       setLoading(false);
+      if (currentToken) {
+        logout();
+      }
     }
   }, []);
 

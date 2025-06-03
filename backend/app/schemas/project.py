@@ -31,7 +31,7 @@ class ProjectBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
 
 class ProjectCreate(ProjectBase):
-    pass
+    technicians: List[int] = Field(default_factory=list)
 
 class ProjectUpdate(ProjectBase):
     name: Optional[str] = Field(None, min_length=1, max_length=255)

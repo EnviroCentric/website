@@ -18,4 +18,5 @@ query_manager = SQLQueryManager()
 users = query_manager
 roles = query_manager
 projects = query_manager
+samples = query_manager
 manager = query_manager 

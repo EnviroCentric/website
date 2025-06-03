@@ -10,7 +10,7 @@ const api = axios.create({
 // Request interceptor
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -58,7 +58,7 @@ api.interceptors.response.use(
         // Only redirect if it's not a login attempt
         if (!error.config.url.includes('/auth/login')) {
           // Clear token and redirect to login
-          localStorage.removeItem('token');
+          sessionStorage.removeItem('token');
           window.location.href = '/login';
         }
       }

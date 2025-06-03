@@ -202,4 +202,17 @@ async def test_update_address_preserves_date(client: AsyncClient, db_pool, techn
     assert response.status_code == 200
     data = response.json()
     assert data["name"] == "456 New St"
-    assert data["date"] == original_date.isoformat() 
+    assert data["date"] == original_date.isoformat()
+
+@pytest.mark.asyncio
+async def test_get_addresses_for_today(client: AsyncClient, technician_token_headers, admin_token_headers):
+    # Create project and address for today
+    project_resp = await client.post("/api/v1/projects/", json={"name": "Test Project"}, headers=admin_token_headers)
+    project_id = project_resp.json()["id"]
+    today = date.today().isoformat()
+    addr_resp = await client.post(f"/api/v1/projects/{project_id}/addresses", json={"name": "Test Address", "date": today}, headers=admin_token_headers)
+    # Get addresses for today
+    resp = await client.get(f"/api/v1/projects/{project_id}/addresses?date={today}", headers=admin_token_headers)
+    assert resp.status_code == 200
+    addresses = resp.json()
+    assert any(addr["name"] == "Test Address" for addr in addresses) 
