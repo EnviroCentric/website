@@ -50,6 +50,8 @@ export default function SampleCollection() {
         address_id: parseInt(addressId, 10),
         description: newSampleDesc,
         cassette_barcode: newSampleBarcode,
+        flow_rate: 12,
+        volume_required: 1000,
       });
       setNewSampleDesc('');
       setNewSampleBarcode('');
@@ -308,10 +310,8 @@ function DetailsModalContent({ sample, onClose, onUpdate, showNotification, time
   const [form, setForm] = React.useState({
     description: sample.description || '',
     is_inside: sample.is_inside ?? null,
-    flow_rate: sample.flow_rate ?? '',
-    volume_required: sample.volume_required ?? '',
-    fields: sample.fields ?? '',
-    fibers: sample.fibers ?? '',
+    flow_rate: sample.flow_rate ?? 12,
+    volume_required: sample.volume_required ?? 1000,
     cassette_barcode: sample.cassette_barcode || '',
     start_time: sample.start_time ? new Date(sample.start_time) : null,
     stop_time: sample.stop_time ? new Date(sample.stop_time) : null,
@@ -444,8 +444,6 @@ function DetailsModalContent({ sample, onClose, onUpdate, showNotification, time
       a.is_inside !== b.is_inside ||
       a.flow_rate !== b.flow_rate ||
       a.volume_required !== b.volume_required ||
-      a.fields !== b.fields ||
-      a.fibers !== b.fibers ||
       a.cassette_barcode !== b.cassette_barcode
     );
   };
@@ -457,10 +455,8 @@ function DetailsModalContent({ sample, onClose, onUpdate, showNotification, time
         await api.patch(`/api/v1/samples/${sample.id}`, {
           description: form.description,
           is_inside: form.is_inside,
-          flow_rate: form.flow_rate === '' ? null : Number(form.flow_rate),
-          volume_required: form.volume_required === '' ? null : Number(form.volume_required),
-          fields: form.fields === '' ? null : Number(form.fields),
-          fibers: form.fibers === '' ? null : Number(form.fibers),
+          flow_rate: Number(form.flow_rate),
+          volume_required: Number(form.volume_required),
           cassette_barcode: form.cassette_barcode,
         });
         showNotification('Sample updated successfully', 'success');
@@ -576,28 +572,6 @@ function DetailsModalContent({ sample, onClose, onUpdate, showNotification, time
             type="number"
             name="volume_required"
             value={form.volume_required}
-            onChange={handleChange}
-            disabled={!scanned}
-            className="w-full rounded border-gray-300 dark:bg-gray-700 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-white"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Fields</label>
-          <input
-            type="number"
-            name="fields"
-            value={form.fields}
-            onChange={handleChange}
-            disabled={!scanned}
-            className="w-full rounded border-gray-300 dark:bg-gray-700 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-white"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Fibers</label>
-          <input
-            type="number"
-            name="fibers"
-            value={form.fibers}
             onChange={handleChange}
             disabled={!scanned}
             className="w-full rounded border-gray-300 dark:bg-gray-700 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-white"

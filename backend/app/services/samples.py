@@ -21,15 +21,33 @@ async def create_sample(
             detail="Only technicians and higher roles can create samples"
         )
     
+    # Check if user has access to the address
+    address = await db.fetchrow(
+        queries.get_address,
+        sample.address_id
+    )
+    if not address:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Address not found"
+        )
+
     # Create the sample
-    result = await db.fetchrow(queries.create_sample, sample.address_id, sample.description, sample.cassette_barcode)
-    if not result:
+    created_sample = await db.fetchrow(
+        queries.create_sample,
+        sample.address_id,
+        sample.description,
+        sample.cassette_barcode,
+        sample.flow_rate,
+        sample.volume_required
+    )
+    if not created_sample:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to create sample"
         )
     
-    return SampleInDB(**result)
+    return SampleInDB(**created_sample)
 
 async def get_sample(
     db: Pool,

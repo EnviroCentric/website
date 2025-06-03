@@ -8,7 +8,8 @@ class SampleBase(BaseModel):
     cassette_barcode: str = Field(..., min_length=1)
 
 class SampleCreate(SampleBase):
-    pass
+    flow_rate: float = 12
+    volume_required: float = 1000
 
 class SampleUpdate(BaseModel):
     description: Optional[str] = None

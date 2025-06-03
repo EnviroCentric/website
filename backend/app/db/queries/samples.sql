@@ -1,5 +1,5 @@
 -- name: create_sample
-INSERT INTO samples (address_id, description, cassette_barcode) VALUES ($1, $2, $3) RETURNING *;
+INSERT INTO samples (address_id, description, cassette_barcode, flow_rate, volume_required) VALUES ($1, $2, $3, $4, $5) RETURNING *;
 
 -- name: get_sample
 SELECT * FROM samples WHERE id = $1;
