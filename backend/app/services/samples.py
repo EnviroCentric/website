@@ -54,7 +54,7 @@ async def get_sample(
     sample_id: int,
     current_user_id: int
 ) -> SampleInDB:
-    """Get a sample by ID."""
+    """Get a sample by ID with project and address details."""
     # Check if user has technician role or higher
     role_level = await get_user_role_level(db, current_user_id)
     if role_level < 50:  # Technician level
@@ -63,8 +63,8 @@ async def get_sample(
             detail="Only technicians and higher roles can view samples"
         )
     
-    # Get the sample
-    result = await db.fetchrow(queries.get_sample, sample_id)
+    # Get the sample with project and address details
+    result = await db.fetchrow(queries.get_sample_with_details, sample_id)
     if not result:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -108,7 +108,9 @@ async def update_sample(
             detail="Sample not found"
         )
     
-    return SampleInDB(**result)
+    # Get the updated sample with project and address details
+    updated_sample = await db.fetchrow(queries.get_sample_with_details, sample_id)
+    return SampleInDB(**updated_sample)
 
 async def delete_sample(
     db: Pool,

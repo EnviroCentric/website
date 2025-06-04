@@ -126,7 +126,7 @@ export default function ProjectDashboard() {
         navigate(`/projects/${projectId}/collect-samples`);
         break;
       case 'analyze':
-        console.log('Analyze samples functionality to be implemented');
+        navigate(`/projects/${projectId}/analyze-samples`);
         break;
       case 'reports':
         console.log('View reports functionality to be implemented');

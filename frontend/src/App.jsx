@@ -15,6 +15,7 @@ import UserManagement from './pages/UserManagement';
 import Projects from './pages/Projects';
 import ProjectDashboard from './pages/ProjectDashboard';
 import SampleCollection from './pages/SampleCollection';
+import SampleAnalysis from './pages/SampleAnalysis';
 
 import { RolesProvider } from './context/RolesContext';
 import { PermissionsProvider } from './context/PermissionsContext';
@@ -59,6 +60,14 @@ function App() {
                     element={
                       <ProtectedRoute>
                         <SampleCollection />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/projects/:projectId/analyze-samples"
+                    element={
+                      <ProtectedRoute>
+                        <SampleAnalysis />
                       </ProtectedRoute>
                     }
                   />

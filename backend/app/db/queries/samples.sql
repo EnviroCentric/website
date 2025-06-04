@@ -4,6 +4,18 @@ INSERT INTO samples (address_id, description, cassette_barcode, flow_rate, volum
 -- name: get_sample
 SELECT * FROM samples WHERE id = $1;
 
+-- name: get_sample_with_details
+SELECT 
+    s.*,
+    a.name as address_name,
+    a.date as address_date,
+    p.id as project_id,
+    p.name as project_name
+FROM samples s
+JOIN addresses a ON s.address_id = a.id
+JOIN projects p ON a.id = ANY(p.address_ids)
+WHERE s.id = $1;
+
 -- name: get_samples_by_address
 SELECT * FROM samples WHERE address_id = $1 ORDER BY created_at DESC;
 

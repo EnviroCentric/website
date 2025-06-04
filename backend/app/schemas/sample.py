@@ -43,6 +43,10 @@ class SampleInDB(SampleBase):
     fibers: Optional[int] = None
     created_at: datetime
     cassette_barcode: str
+    address_name: Optional[str] = None
+    address_date: Optional[datetime] = None
+    project_id: Optional[int] = None
+    project_name: Optional[str] = None
 
     class Config:
         from_attributes = True 
