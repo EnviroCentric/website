@@ -1,6 +1,6 @@
 from typing import Optional, List, Any
 from datetime import datetime
-from pydantic import BaseModel, EmailStr, ConfigDict, field_validator, constr
+from pydantic import BaseModel, EmailStr, ConfigDict, field_validator, constr, Field
 from app.core.validators import validate_password
 
 
@@ -8,7 +8,7 @@ class RoleResponse(BaseModel):
     id: int
     name: str
     description: Optional[str] = None
-    permissions: List[str] = []
+    permissions: List[str] = Field(default_factory=list)   # <- safer default
     level: Optional[int] = None
     created_at: Optional[datetime] = None
 
@@ -69,8 +69,9 @@ class UserResponse(UserBase):
     id: int
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
-    roles: List[RoleResponse] = []
+    roles: List[RoleResponse] = Field(default_factory=list)  # <- safer default
     is_superuser: bool = False
+    highest_level: int = 0                                    # <- NEW
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -110,3 +111,4 @@ class UserInDB(BaseModel):
     last_name: str
     is_active: bool
     is_superuser: bool
+    highest_level: int = 0   # <- NEW (optional but useful if you load from DB here)

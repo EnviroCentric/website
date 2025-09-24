@@ -1,32 +1,12 @@
-import api from './api';
-import { setAuthToken } from '../utils/auth';
+// This service acts as a thin wrapper around the consolidated authentication
+// functions defined in `auth.js`.  Historically there were two separate
+// authentication services (`auth.js` and `authService.js`) which contained
+// duplicate logic for login, registration and token refresh.  To reduce
+// duplication and ensure a single source of truth, the functions from
+// `auth.js` are re‑exported here.  This preserves backward compatibility
+// with modules that import from `authService.js` while centralising the
+// implementation.
 
-export const login = async (credentials) => {
-  try {
-    const response = await api.post('/api/v1/auth/login', credentials);
-    const { access_token } = response.data;
-    setAuthToken(access_token);
-    return response.data;
-  } catch (error) {
-    throw error.response?.data || { message: 'Login failed' };
-  }
-};
+import { login, register, refreshToken, logout } from './auth';
 
-export const register = async (userData) => {
-  try {
-    const response = await api.post('/api/v1/auth/register', userData);
-    return response.data;
-  } catch (error) {
-    throw error.response?.data || { message: 'Registration failed' };
-  }
-};
-
-export const logout = async () => {
-  try {
-    await api.post('/auth/logout');
-  } catch (error) {
-    console.error('Logout failed:', error);
-  } finally {
-    setAuthToken(null);
-  }
-}; 
+export { login, register, refreshToken, logout };

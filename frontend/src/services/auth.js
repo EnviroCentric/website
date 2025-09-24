@@ -1,10 +1,10 @@
-import axios from 'axios';
+import api from './api';
 import jwtDecode from 'jwt-decode';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 // Configure axios defaults
-axios.defaults.baseURL = API_URL;
+api.defaults.baseURL = API_URL;
 
 let isRefreshing = false;
 let failedQueue = [];
@@ -21,9 +21,9 @@ const processQueue = (error, token = null) => {
 };
 
 // Add a request interceptor
-axios.interceptors.request.use(
+api.interceptors.request.use(
   (config) => {
-    const token = sessionStorage.getItem('token');
+    const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -35,7 +35,7 @@ axios.interceptors.request.use(
 );
 
 // Add a response interceptor
-axios.interceptors.response.use(
+api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
@@ -47,7 +47,7 @@ axios.interceptors.response.use(
         })
           .then(token => {
             originalRequest.headers.Authorization = `Bearer ${token}`;
-            return axios(originalRequest);
+            return api(originalRequest);
           })
           .catch(err => Promise.reject(err));
       }
@@ -56,22 +56,22 @@ axios.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const refreshToken = sessionStorage.getItem('refreshToken');
+        const refreshToken = localStorage.getItem('refreshToken');
         if (!refreshToken) {
           throw new Error('No refresh token available');
         }
 
-        const response = await axios.post('/api/v1/auth/refresh', {
+        const response = await api.post('/api/v1/auth/refresh', {
           refresh_token: refreshToken
         });
 
         const { access_token, refresh_token } = response.data;
         setAuthToken(access_token);
-        sessionStorage.setItem('refreshToken', refresh_token);
+        localStorage.setItem('refreshToken', refresh_token);
 
         processQueue(null, access_token);
         originalRequest.headers.Authorization = `Bearer ${access_token}`;
-        return axios(originalRequest);
+        return api(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError, null);
         logout();
@@ -105,29 +105,63 @@ export const getTokenData = (token) => {
 
 export const setAuthToken = (token) => {
   if (token) {
-    sessionStorage.setItem('token', token);
+    localStorage.setItem('token', token);
   } else {
-    sessionStorage.removeItem('token');
+    localStorage.removeItem('token');
   }
 };
 
 export const getAuthToken = () => {
-  return sessionStorage.getItem('token');
+  return localStorage.getItem('token');
 };
 
 // API Service Functions
 export const register = async (userData) => {
   try {
-    const response = await axios.post('/api/v1/auth/register', {
+    const response = await api.post('/api/v1/auth/register', {
       ...userData,
       password_confirm: userData.password
     });
     const { access_token, refresh_token } = response.data;
     setAuthToken(access_token);
-    sessionStorage.setItem('refreshToken', refresh_token);
+    localStorage.setItem('refreshToken', refresh_token);
     return response.data;
   } catch (error) {
     throw error.response?.data || { detail: 'An error occurred during registration' };
+  }
+};
+
+// Test login function
+export const testLogin = async (email, password) => {
+  try {
+    const formData = new FormData();
+    formData.append('username', email);
+    formData.append('password', password);
+
+    console.log('Sending test login request to:', `${API_URL}/test-login`);
+    console.log('Request data:', {
+      username: email,
+      password: '***' // Don't log actual password
+    });
+
+    const response = await api.post('/test-login', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    
+    console.log('Test login response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.log('Test login error details:', {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      headers: error.response?.headers,
+      message: error.message,
+      code: error.code
+    });
+    throw error;
   }
 };
 
@@ -137,19 +171,35 @@ export const login = async (email, password) => {
     formData.append('username', email);
     formData.append('password', password);
 
-    const response = await axios.post('/api/v1/auth/login', formData);
+    const response = await api.post('/api/v1/auth/login', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
     const { access_token, refresh_token } = response.data;
     setAuthToken(access_token);
-    sessionStorage.setItem('refreshToken', refresh_token);
+    localStorage.setItem('refreshToken', refresh_token);
     return response.data;
   } catch (error) {
-    throw error.response?.data || { detail: 'An error occurred during login' };
+    if (error.code === 'ERR_NETWORK') {
+      throw { detail: 'Network error: Unable to reach the server. Please check your connection.' };
+    }
+    if (error.response?.data?.detail) {
+      if (Array.isArray(error.response.data.detail)) {
+        throw { detail: error.response.data.detail[0].msg };
+      } else if (typeof error.response.data.detail === 'object') {
+        throw { detail: error.response.data.detail.msg };
+      } else {
+        throw { detail: error.response.data.detail };
+      }
+    }
+    throw { detail: 'An error occurred during login' };
   }
 };
 
 export const getCurrentUser = async () => {
   try {
-    const response = await axios.get('/api/v1/auth/me');
+    const response = await api.get('/api/v1/auth/me');
     return response.data;
   } catch (error) {
     throw error.response?.data || { detail: 'An error occurred while fetching user data' };
@@ -157,6 +207,6 @@ export const getCurrentUser = async () => {
 };
 
 export const logout = () => {
-  sessionStorage.removeItem('token');
-  sessionStorage.removeItem('refreshToken');
+  localStorage.removeItem('token');
+  localStorage.removeItem('refreshToken');
 }; 
