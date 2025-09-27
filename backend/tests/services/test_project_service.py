@@ -1,191 +1,118 @@
 import pytest
 from datetime import date
-from fastapi import HTTPException
-from app.schemas.project import ProjectCreate, ProjectUpdate, AddressCreate, AddressUpdate
-from app.services import projects as project_service
+from app.schemas.project import ProjectCreate, ProjectUpdate, AddressCreate, AddressUpdate, ProjectVisitCreate
+from app.services.projects import ProjectService
 
 @pytest.mark.asyncio
-async def test_create_project_success(db_pool, technician_user):
+async def test_create_project_success(db_pool):
     """Test creating a project with valid data."""
-    project_data = ProjectCreate(name="Test Project")
-    project = await project_service.create_project(db_pool, project_data, technician_user.id)
+    service = ProjectService(db_pool)
+    project_data = ProjectCreate(name="Test Project", company_id=1)
+    project = await service.create_project(project_data)
     assert project.name == "Test Project"
     assert project.id is not None
+    assert project.company_id == 1
 
 @pytest.mark.asyncio
-async def test_create_project_unauthorized(db_pool, test_user):
-    """Test creating a project without proper authorization."""
-    project_data = ProjectCreate(name="Test Project")
-    with pytest.raises(HTTPException) as exc:
-        await project_service.create_project(db_pool, project_data, test_user.id)
-    assert exc.value.status_code == 403
-
-@pytest.mark.asyncio
-async def test_get_project_success(db_pool, admin_user, technician_user):
+async def test_get_project_success(db_pool):
     """Test getting a project that exists."""
+    service = ProjectService(db_pool)
+    
     # Create a project first
-    project_data = ProjectCreate(name="Test Project")
-    project = await project_service.create_project(db_pool, project_data, admin_user.id)
-
-    # Assign technician to project
-    await project_service.assign_technician(
-        db_pool, project.id, technician_user.id, admin_user.id
-    )
+    project_data = ProjectCreate(name="Test Project", company_id=1)
+    project = await service.create_project(project_data)
 
     # Get project
-    result = await project_service.get_project(db_pool, project.id, technician_user.id)
+    result = await service.get_project_by_id(project.id)
     assert result.name == "Test Project"
     assert result.id == project.id
-    assert isinstance(result.addresses, list)
+    assert result.company_id == 1
 
 @pytest.mark.asyncio
-async def test_get_project_not_found(db_pool, technician_user):
+async def test_get_project_not_found(db_pool):
     """Test getting a project that doesn't exist."""
-    with pytest.raises(HTTPException) as exc:
-        await project_service.get_project(db_pool, 999, technician_user.id)
-    assert exc.value.status_code == 404
+    service = ProjectService(db_pool)
+    result = await service.get_project_by_id(999)
+    assert result is None
 
 @pytest.mark.asyncio
-async def test_update_project_success(db_pool, admin_user, technician_user):
+async def test_update_project_success(db_pool):
     """Test updating a project with valid data."""
+    service = ProjectService(db_pool)
+    
     # Create a project first
-    project_data = ProjectCreate(name="Test Project")
-    project = await project_service.create_project(db_pool, project_data, admin_user.id)
-
-    # Assign technician to project
-    await project_service.assign_technician(
-        db_pool, project.id, technician_user.id, admin_user.id
-    )
+    project_data = ProjectCreate(name="Test Project", company_id=1)
+    project = await service.create_project(project_data)
 
     # Update project
     update_data = ProjectUpdate(name="Updated Project")
-    updated = await project_service.update_project(
-        db_pool, project.id, update_data, technician_user.id
-    )
+    updated = await service.update_project(project.id, update_data)
     assert updated.name == "Updated Project"
+    assert updated.id == project.id
 
 @pytest.mark.asyncio
-async def test_create_address_success(db_pool, admin_user, technician_user):
+async def test_create_address_success(db_pool):
     """Test creating an address with valid data."""
-    # Create a project first
-    project_data = ProjectCreate(name="Test Project")
-    project = await project_service.create_project(db_pool, project_data, admin_user.id)
-
-    # Assign technician to project
-    await project_service.assign_technician(
-        db_pool, project.id, technician_user.id, admin_user.id
-    )
-
+    service = ProjectService(db_pool)
+    
     # Create address
-    address_data = AddressCreate(name="123 Test St", date=date.today())
-    address = await project_service.create_address(
-        db_pool, project.id, address_data, technician_user.id
-    )
-    assert address.name == "123 Test St"
-    assert address.date == date.today()
+    address_data = AddressCreate(name="123 Test St", address_line1="123 Test Street", city="Test City")
+    address = await service.create_address(address_data)
+    assert address["name"] == "123 Test St"
+    assert address["address_line1"] == "123 Test Street"
+    assert "id" in address
 
 @pytest.mark.asyncio
-async def test_create_duplicate_address_same_day(db_pool, admin_user, technician_user):
-    """Test creating a duplicate address on the same day."""
+async def test_create_project_visit_success(db_pool, technician_user):
+    """Test creating a project visit with valid data."""
+    service = ProjectService(db_pool)
+    
     # Create a project first
-    project_data = ProjectCreate(name="Test Project")
-    project = await project_service.create_project(db_pool, project_data, admin_user.id)
-
-    # Assign technician to project
-    await project_service.assign_technician(
-        db_pool, project.id, technician_user.id, admin_user.id
+    project_data = ProjectCreate(name="Test Project", company_id=1)
+    project = await service.create_project(project_data)
+    
+    # Create an address
+    address_data = AddressCreate(name="123 Test St", address_line1="123 Test Street")
+    address = await service.create_address(address_data)
+    
+    # Create project visit
+    visit_data = ProjectVisitCreate(
+        project_id=project.id,
+        address_id=address["id"],
+        visit_date=date.today(),
+        technician_id=technician_user.id,
+        notes="Test visit"
     )
+    visit = await service.create_project_visit(visit_data)
+    assert visit["project_id"] == project.id
+    assert visit["address_id"] == address["id"]
+    assert visit["technician_id"] == technician_user.id
 
-    # Create first address
-    address_data = AddressCreate(name="123 Test St", date=date.today())
-    await project_service.create_address(
-        db_pool, project.id, address_data, technician_user.id
+@pytest.mark.asyncio 
+async def test_check_technician_assigned_to_project(db_pool, technician_user):
+    """Test checking if a technician is assigned to a project through visits."""
+    service = ProjectService(db_pool)
+    
+    # Create a project
+    project_data = ProjectCreate(name="Test Project", company_id=1)
+    project = await service.create_project(project_data)
+    
+    # Initially technician is not assigned
+    is_assigned = await service.check_technician_assigned_to_project(project.id, technician_user.id)
+    assert not is_assigned
+    
+    # Create an address and visit to assign technician
+    address_data = AddressCreate(name="123 Test St")
+    address = await service.create_address(address_data)
+    
+    visit_data = ProjectVisitCreate(
+        project_id=project.id,
+        address_id=address["id"],
+        visit_date=date.today(),
+        technician_id=technician_user.id
     )
-
-    # Try to create duplicate address
-    with pytest.raises(HTTPException) as exc:
-        await project_service.create_address(
-            db_pool, project.id, address_data, technician_user.id
-        )
-    assert exc.value.status_code == 400
-
-@pytest.mark.asyncio
-async def test_assign_technician_success(db_pool, admin_user, technician_user):
-    """Test assigning a technician to a project."""
-    # Create a project first
-    project_data = ProjectCreate(name="Test Project")
-    project = await project_service.create_project(db_pool, project_data, admin_user.id)
-
-    # Assign technician
-    await project_service.assign_technician(
-        db_pool, project.id, technician_user.id, admin_user.id
-    )
-
-    # Verify technician can access project
-    result = await project_service.get_project(db_pool, project.id, technician_user.id)
-    assert result.id == project.id
-
-@pytest.mark.asyncio
-async def test_assign_technician_unauthorized(db_pool, technician_user):
-    """Test assigning a technician without proper authorization."""
-    # Create a project first
-    project_data = ProjectCreate(name="Test Project")
-    project = await project_service.create_project(db_pool, project_data, technician_user.id)
-
-    # Try to assign another technician (should fail)
-    with pytest.raises(HTTPException) as exc:
-        await project_service.assign_technician(
-            db_pool, project.id, 999, technician_user.id
-        )
-    assert exc.value.status_code == 403
-
-@pytest.mark.asyncio
-async def test_remove_technician_success(db_pool, admin_user, technician_user):
-    """Test removing a technician from a project."""
-    # Create a project first
-    project_data = ProjectCreate(name="Test Project")
-    project = await project_service.create_project(db_pool, project_data, admin_user.id)
-
-    # Assign technician
-    await project_service.assign_technician(
-        db_pool, project.id, technician_user.id, admin_user.id
-    )
-
-    # Remove technician
-    await project_service.remove_technician(
-        db_pool, project.id, technician_user.id, admin_user.id
-    )
-
-    # Verify technician can no longer access project
-    with pytest.raises(HTTPException) as exc:
-        await project_service.get_project(db_pool, project.id, technician_user.id)
-    assert exc.value.status_code == 403
-
-@pytest.mark.asyncio
-async def test_update_address_preserves_date(db_pool, admin_user, technician_user):
-    """Test that updating an address preserves its original date."""
-    # Create a project first
-    project_data = ProjectCreate(name="Test Project")
-    project = await project_service.create_project(db_pool, project_data, admin_user.id)
-
-    # Assign technician to project
-    await project_service.assign_technician(
-        db_pool, project.id, technician_user.id, admin_user.id
-    )
-
-    # Create address with specific date
-    original_date = date(2024, 1, 1)
-    address_data = AddressCreate(name="123 Test St", date=original_date)
-    address = await project_service.create_address(
-        db_pool, project.id, address_data, technician_user.id
-    )
-
-    # Update address name
-    update_data = AddressUpdate(name="456 New St")
-    updated = await project_service.update_address(
-        db_pool, project.id, address.id, update_data, technician_user.id
-    )
-
-    # Verify name was updated but date remained the same
-    assert updated.name == "456 New St"
-    assert updated.date == original_date 
+    await service.create_project_visit(visit_data)
+    
+    # Now technician should be assigned
+    is_assigned = await service.check_technician_assigned_to_project(project.id, technician_user.id)
+    assert is_assigned

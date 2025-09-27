@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Modal from '../components/Modal';
+import { getDefaultRedirectPath } from '../utils/redirectHelpers';
 
 export default function Login({ isOpen, onClose, onSwitchToRegister, successMessage }) {
   const [formData, setFormData] = useState(() => {
@@ -18,7 +19,6 @@ export default function Login({ isOpen, onClose, onSwitchToRegister, successMess
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = location.state?.from?.pathname || '/dashboard';
 
   // Clear form data when modal is closed
   useEffect(() => {
@@ -58,10 +58,13 @@ export default function Login({ isOpen, onClose, onSwitchToRegister, successMess
     setIsLoading(true);
 
     try {
-      await login(formData.email, formData.password);
+      const userData = await login(formData.email, formData.password);
       localStorage.removeItem('loginFormData');
       onClose();
-      navigate(from, { replace: true });
+      
+      // Use location.state.from as priority if it exists (user was redirected to login)
+      const redirectPath = location.state?.from?.pathname || getDefaultRedirectPath(userData.user);
+      navigate(redirectPath, { replace: true });
     } catch (error) {
       if (error.detail === "Email not registered. Please create an account first.") {
         setError(error.detail);

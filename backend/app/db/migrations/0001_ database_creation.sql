@@ -23,7 +23,7 @@ CREATE TABLE users (
     is_superuser BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    highest_level SMALLINT NOT NULL DEFAULT 0;
+    highest_level SMALLINT NOT NULL DEFAULT 0
 );
 
 -- Create roles table
@@ -44,13 +44,14 @@ CREATE TABLE user_roles (
     PRIMARY KEY (user_id, role_id)
 );
 
--- Insert initial roles with their levels
+-- Insert initial roles with their levels for your workflow
 INSERT INTO roles (name, description, level) VALUES
     ('admin', 'Administrator with full system access', 100),
     ('manager', 'Manager with elevated access', 90),
     ('supervisor', 'Supervisor with team management access', 80),
     ('field_tech', 'Field technician with sample collection access', 50),
-    ('lab_tech', 'Lab technician with sample preparation and analysis access', 60);
+    ('lab_tech', 'Lab technician with sample preparation and analysis access', 60),
+    ('client', 'Client company user with view-only access', 10);
 
 -- Projects with current lifecycle fields
 CREATE TABLE projects (
@@ -182,3 +183,36 @@ CREATE TABLE sample_time_events (
     notes TEXT,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Reports generated for completed project addresses
+CREATE TABLE reports (
+    id SERIAL PRIMARY KEY,
+    project_id INT REFERENCES projects(id),
+    address_id INT REFERENCES addresses(id),
+    report_name VARCHAR(255) NOT NULL,
+    report_file_path TEXT,  -- Path to generated PDF/document
+    generated_by INT REFERENCES users(id),
+    generated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    report_data JSONB,  -- Store report calculations/data
+    is_final BOOLEAN DEFAULT FALSE,
+    client_visible BOOLEAN DEFAULT TRUE,
+    notes TEXT
+);
+
+-- Create indexes for performance
+CREATE INDEX idx_users_company_id ON users(company_id);
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_projects_company_id ON projects(company_id);
+CREATE INDEX idx_projects_status ON projects(status);
+CREATE INDEX idx_project_visits_project_id ON project_visits(project_id);
+CREATE INDEX idx_project_visits_technician_id ON project_visits(technician_id);
+CREATE INDEX idx_project_visits_date ON project_visits(visit_date);
+CREATE INDEX idx_samples_project_id ON samples(project_id);
+CREATE INDEX idx_samples_visit_id ON samples(visit_id);
+CREATE INDEX idx_samples_status ON samples(sample_status);
+CREATE INDEX idx_samples_collected_by ON samples(collected_by);
+CREATE INDEX idx_analysis_runs_sample_id ON analysis_runs(sample_id);
+CREATE INDEX idx_analysis_runs_analyzed_by ON analysis_runs(analyzed_by);
+CREATE INDEX idx_reports_project_id ON reports(project_id);
+CREATE INDEX idx_reports_address_id ON reports(address_id);
+CREATE INDEX idx_reports_client_visible ON reports(client_visible);

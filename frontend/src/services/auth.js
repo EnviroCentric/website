@@ -167,19 +167,54 @@ export const testLogin = async (email, password) => {
 
 export const login = async (email, password) => {
   try {
-    const formData = new FormData();
+    // Use URLSearchParams for form-encoded data instead of FormData for multipart
+    const formData = new URLSearchParams();
     formData.append('username', email);
     formData.append('password', password);
 
+    console.log('=== LOGIN DEBUG INFO ===');
+    console.log('Email:', email);
+    console.log('Form data string:', formData.toString());
+    console.log('API base URL:', import.meta.env.VITE_API_URL || 'http://localhost:8000');
+    console.log('Full URL will be:', `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/v1/auth/login`);
+
+    // Use direct fetch instead of axios to debug
+    const directResponse = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/v1/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
+      },
+      body: formData
+    });
+
+    console.log('Direct fetch response status:', directResponse.status);
+    console.log('Direct fetch response headers:', Object.fromEntries(directResponse.headers.entries()));
+
+    if (directResponse.ok) {
+      const data = await directResponse.json();
+      console.log('✅ Direct fetch succeeded!', data);
+      setAuthToken(data.access_token);
+      localStorage.setItem('refreshToken', data.refresh_token);
+      return data;
+    } else {
+      const errorText = await directResponse.text();
+      console.log('❌ Direct fetch failed:', errorText);
+      throw new Error(`Direct fetch failed: ${directResponse.status} - ${errorText}`);
+    }
+
+    // Original axios code (commented out for debugging)
+    /*
     const response = await api.post('/api/v1/auth/login', formData, {
       headers: {
-        'Content-Type': 'multipart/form-data',
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
     });
     const { access_token, refresh_token } = response.data;
     setAuthToken(access_token);
     localStorage.setItem('refreshToken', refresh_token);
     return response.data;
+    */
   } catch (error) {
     if (error.code === 'ERR_NETWORK') {
       throw { detail: 'Network error: Unable to reach the server. Please check your connection.' };

@@ -5,12 +5,16 @@ import asyncpg
 from app.db.session import get_db
 from app.core.security import get_current_user
 from app.core.validators import validate_password
-from app.schemas.user import UserResponse, UserCreate, UserUpdate
+from app.schemas.user import UserResponse, UserCreate, UserUpdate, PasswordUpdate
 from app.schemas.role import RoleInDB  # <- use your Role schema for stronger typing
 from app.services.users import UserService
 from app.db.queries.manager import query_manager
 
-router = APIRouter(prefix="/users", tags=["users"])
+router = APIRouter(
+    prefix="/users", 
+    tags=["User Management"],
+    responses={403: {"description": "Insufficient permissions"}}
+)
 
 MANAGE_USER_LVL = 80  # minimum role level required for admin actions
 
@@ -52,6 +56,7 @@ def _highest_role_level(user: UserResponse) -> int:
 # ---------- collection ----------
 
 @router.get("", response_model=List[UserResponse])
+@router.get("/", response_model=List[UserResponse])  # Handle trailing slash
 async def list_users(
     current_user: dict = Depends(get_current_user),
     db: asyncpg.Pool = Depends(get_db),
@@ -102,15 +107,53 @@ async def update_me(
     return updated
 
 
+@router.put("/me/password")
+async def change_password(
+    password_data: PasswordUpdate,
+    current_user: dict = Depends(get_current_user),
+    db: asyncpg.Pool = Depends(get_db),
+):
+    """
+    Change the current user's password.
+    Requires the current password for verification.
+    """
+    from app.core.security import verify_password, get_password_hash
+    
+    service = UserService(db)
+    cu = UserResponse(**current_user)
+    
+    # Get the user with hashed password to verify current password
+    user_with_password = await service.get_user_by_id_with_password(cu.id)
+    if not user_with_password:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    
+    # Verify current password
+    if not verify_password(password_data.current_password, user_with_password.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect"
+        )
+    
+    # Update password
+    new_hashed_password = get_password_hash(password_data.new_password)
+    success = await service.update_user_password(cu.id, new_hashed_password)
+    
+    if not success:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update password")
+    
+    return {"message": "Password updated successfully"}
+
+
 # ---------- single resource ----------
 
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user_by_id(
     user_id: int,
+    current_user: dict = Depends(get_current_user),
     db: asyncpg.Pool = Depends(get_db),
 ):
     """
-    Fetch a user by id.
+    Fetch a user by id. Requires authentication.
     """
     user = await UserService(db).get_user_by_id(user_id)
     if not user:
@@ -147,6 +190,7 @@ async def create_user(
 
 
 @router.patch("/{user_id}", response_model=UserResponse)
+@router.put("/{user_id}", response_model=UserResponse)  # Add PUT for compatibility with tests
 async def patch_user(
     user_id: int,
     user_in: UserUpdate,

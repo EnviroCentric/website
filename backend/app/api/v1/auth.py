@@ -5,10 +5,14 @@ from app.services.users import UserService
 from app.db.session import get_db
 import asyncpg
 from app.schemas.user import UserCreate, UserResponse, TokenResponse, UserWithTokens, UserInDB
+from app.schemas.auth import RefreshTokenRequest
 from app.core.validators import validate_email
 from pydantic import BaseModel, field_validator
 
-router = APIRouter(tags=["auth"])
+router = APIRouter(
+    tags=["Authentication"],
+    responses={401: {"description": "Authentication failed"}}
+)
 
 class RegisterRequest(UserCreate):
     password_confirm: str
@@ -95,9 +99,6 @@ async def login(
         "refresh_token": refresh_token,
         "token_type": "bearer"
     }
-
-class RefreshTokenRequest(BaseModel):
-    refresh_token: str
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(

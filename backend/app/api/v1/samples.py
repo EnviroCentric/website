@@ -7,7 +7,11 @@ from app.db.session import get_db
 from app.schemas.sample import SampleCreate, SampleUpdate, SampleInDB
 from app.services import samples as sample_service
 
-router = APIRouter(prefix="/samples", tags=["samples"])
+router = APIRouter(
+    prefix="/samples", 
+    tags=["Sample Management"],
+    responses={403: {"description": "Insufficient permissions"}}
+)
 
 @router.post("", response_model=SampleInDB)
 @router.post("/", response_model=SampleInDB)

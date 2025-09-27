@@ -43,3 +43,17 @@ INSERT INTO roles (name, description, level)
 VALUES ('admin', 'Administrator with full system access', 100)
 ON CONFLICT (name) DO UPDATE SET level = 100
 RETURNING id;
+
+-- name: get_assignable_roles
+-- Get roles that can be assigned (excludes admin for normal assignment)
+SELECT id, name, description, level, created_at
+FROM roles
+WHERE level < 100
+ORDER BY level DESC;
+
+-- name: get_client_roles
+-- Get roles suitable for client company users
+SELECT id, name, description, level, created_at
+FROM roles
+WHERE level <= 10
+ORDER BY level DESC;

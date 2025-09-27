@@ -1,12 +1,73 @@
-# React + Vite
+# EnviroCentric Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React frontend application for the EnviroCentric environmental sample management system.
 
-Currently, two official plugins are available:
+## Tech Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **React 18** - UI library
+- **Vite** - Build tool and dev server  
+- **Tailwind CSS** - Styling framework
+- **React Router** - Client-side routing
+- **Axios** - HTTP client for API requests
 
-## Expanding the ESLint configuration
+## Features
 
-If you are developing a production application, we recommend using TypeScript and enable type-aware lint rules. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- 🔐 **Authentication** - JWT-based auth with automatic token refresh
+- 👥 **User Management** - Role-based access control
+- 📊 **Project Management** - Environmental project tracking
+- 🧪 **Sample Collection** - Laboratory sample management
+- 📱 **Responsive Design** - Mobile-friendly interface
+
+## Development
+
+### Prerequisites
+- Node.js 18+
+- Docker (for running with backend)
+
+### Getting Started
+
+```bash
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+
+# Visit http://localhost:5173
+```
+
+### Environment Variables
+
+Create a `.env` file:
+```env
+VITE_API_URL=http://localhost:8000
+```
+
+### Project Structure
+
+```
+src/
+├── components/     # Reusable UI components
+├── pages/         # Route components
+├── services/      # API service layer
+├── context/       # React contexts (Auth, Theme, etc.)
+├── hooks/         # Custom React hooks
+└── routes/        # Route configuration
+```
+
+### Authentication
+
+The app uses JWT tokens stored in localStorage with automatic refresh:
+- Access tokens expire in 30 minutes
+- Refresh tokens expire in 30 days
+- Automatic redirect to login on token expiry
+
+### Building
+
+```bash
+# Production build
+npm run build
+
+# Preview production build
+npm run preview
+```

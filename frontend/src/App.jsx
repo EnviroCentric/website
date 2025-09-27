@@ -9,12 +9,14 @@ import Profile from './pages/Profile';
 import ProfileEdit from './pages/ProfileEdit';
 import ProfilePassword from './pages/ProfilePassword';
 import ProtectedRoute from './routes/ProtectedRoute';
+import RoleBasedRoute, { RequireTechnician, RequireSupervisor, RequireAdmin } from './routes/RoleBasedRoute';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import UserManagement from './pages/UserManagement';
 import Projects from './pages/Projects';
 import ProjectDashboard from './pages/ProjectDashboard';
 import SampleCollection from './pages/SampleCollection';
+import ServiceInfo from './pages/ServiceInfo';
 
 import { RolesProvider } from './context/RolesContext';
 import { PermissionsProvider } from './context/PermissionsContext';
@@ -30,38 +32,46 @@ function App() {
               <main className="pt-16 pb-6 min-h-[calc(100vh-4rem)] bg-white dark:bg-gray-900">
                 <Routes>
                   <Route path="/" element={<Home />} />
+                  <Route path="/services" element={<ServiceInfo />} />
+                  {/* Dashboard - Requires Technician level (50) or higher */}
                   <Route
                     path="/dashboard"
                     element={
-                      <ProtectedRoute>
+                      <RequireTechnician showForbidden={true}>
                         <Dashboard />
-                      </ProtectedRoute>
+                      </RequireTechnician>
                     }
                   />
+                  
+                  {/* Projects - Requires Supervisor level (80) or higher */}
                   <Route
                     path="/projects"
                     element={
-                      <ProtectedRoute>
+                      <RequireSupervisor showForbidden={true}>
                         <Projects />
-                      </ProtectedRoute>
+                      </RequireSupervisor>
                     }
                   />
                   <Route
                     path="/projects/:projectId"
                     element={
-                      <ProtectedRoute>
+                      <RequireTechnician showForbidden={true}>
                         <ProjectDashboard />
-                      </ProtectedRoute>
+                      </RequireTechnician>
                     }
                   />
+                  
+                  {/* Sample Collection - Requires Technician level (50) or higher */}
                   <Route
                     path="/projects/:projectId/addresses/:addressId/collect-samples"
                     element={
-                      <ProtectedRoute>
+                      <RequireTechnician showForbidden={true}>
                         <SampleCollection />
-                      </ProtectedRoute>
+                      </RequireTechnician>
                     }
                   />
+                  
+                  {/* Profile pages - Any authenticated user */}
                   <Route
                     path="/profile"
                     element={
@@ -86,14 +96,18 @@ function App() {
                       </ProtectedRoute>
                     }
                   />
+                  
+                  {/* Public routes */}
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />
+                  
+                  {/* User Management - Requires Supervisor level (80) or higher */}
                   <Route
                     path="/user-management"
                     element={
-                      <ProtectedRoute>
+                      <RoleBasedRoute minLevel={80} showForbidden={true}>
                         <UserManagement />
-                      </ProtectedRoute>
+                      </RoleBasedRoute>
                     }
                   />
                 </Routes>

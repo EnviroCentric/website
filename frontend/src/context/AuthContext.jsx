@@ -24,11 +24,11 @@ export function AuthProvider({ children }) {
   const fetchUserData = async (force = false) => {
     const now = Date.now();
     if (!force && user && now - lastFetchTime.current < CACHE_DURATION) {
-      return; // Use cached data if it's still valid
+      return user; // Return cached data if it's still valid
     }
 
     if (fetchInProgress.current) {
-      return; // Prevent concurrent fetches
+      return user; // Return current user if fetch is in progress
     }
 
     try {
@@ -37,9 +37,11 @@ export function AuthProvider({ children }) {
       setUser(userData);
       setIsAuthenticated(true);
       lastFetchTime.current = now;
+      return userData; // Return the fetched user data
     } catch (error) {
       console.error('Error fetching user data:', error);
       logout();
+      throw error; // Re-throw to handle in calling functions
     } finally {
       setLoading(false);
       fetchInProgress.current = false;
@@ -64,8 +66,8 @@ export function AuthProvider({ children }) {
     try {
       const response = await loginService(email, password);
       setToken(getAuthToken());
-      await fetchUserData(true); // Force fetch on login
-      return response;
+      const userData = await fetchUserData(true); // Force fetch on login
+      return { ...response, user: userData }; // Return response with fetched user data
     } catch (error) {
       throw error;
     }
@@ -75,8 +77,8 @@ export function AuthProvider({ children }) {
     try {
       const response = await registerService(userData);
       setToken(getAuthToken());
-      await fetchUserData(true); // Force fetch after registration
-      return response;
+      const fetchedUser = await fetchUserData(true); // Force fetch after registration
+      return { ...response, user: fetchedUser }; // Return response with fetched user data
     } catch (error) {
       throw error;
     }

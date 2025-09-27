@@ -34,7 +34,7 @@ def event_loop() -> Generator:
     yield loop
     loop.close()
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 async def create_test_database():
     """Create test database and tables."""
     # Connect to default database to create test database
@@ -59,72 +59,51 @@ async def create_test_database():
 async def db_pool(create_test_database) -> AsyncGenerator[Pool, None]:
     """Create a fresh database pool for each test."""
     pool = await create_pool(TEST_DATABASE_URL, command_timeout=60)
+    
+    # Set up test data BEFORE yielding the pool
+    async with pool.acquire() as conn:
+        # Try to recreate basic roles if the tables exist
+        try:
+            # Re-insert default roles if the table exists
+            await conn.execute("""
+                INSERT INTO roles (name, description, level)
+                VALUES
+                    ('admin', 'Administrator with full system access', 100),
+                    ('manager', 'Manager with elevated access', 90),
+                    ('supervisor', 'Supervisor with team management access', 80),
+                    ('technician', 'Technician with project management access', 50)
+                ON CONFLICT (name) DO UPDATE SET level = EXCLUDED.level
+            """)
+        except Exception:
+            # Roles table doesn't exist, skip it
+            pass
+            
+        # Try to create a test company if the table exists
+        try:
+            await conn.execute("""
+                INSERT INTO companies (name, city, state)
+                VALUES ('Test Company', 'Test City', 'Test State')
+            """)
+        except Exception:
+            # Companies table doesn't exist, skip it
+            pass
+    
     yield pool
+    
     # Clean up the tables after each test
     async with pool.acquire() as conn:
         await conn.execute("DROP VIEW IF EXISTS user_roles_with_permissions")
-        await conn.execute("TRUNCATE TABLE project_technicians RESTART IDENTITY CASCADE")
-        await conn.execute("TRUNCATE TABLE projects RESTART IDENTITY CASCADE")
-        await conn.execute("TRUNCATE TABLE addresses RESTART IDENTITY CASCADE")
-        await conn.execute("TRUNCATE TABLE user_roles RESTART IDENTITY CASCADE")
-        await conn.execute("TRUNCATE TABLE role_permissions RESTART IDENTITY CASCADE")
-        await conn.execute("TRUNCATE TABLE permissions RESTART IDENTITY CASCADE")
-        await conn.execute("TRUNCATE TABLE roles RESTART IDENTITY CASCADE")
-        await conn.execute("TRUNCATE TABLE users RESTART IDENTITY CASCADE")
-        
-        # Re-create the view
-        await conn.execute("""
-            CREATE OR REPLACE VIEW user_roles_with_permissions AS
-            SELECT 
-                ur.user_id,
-                r.id,
-                r.name,
-                r.description,
-                r.level,
-                r.created_at,
-                COALESCE(array_agg(p.name ORDER BY p.name) FILTER (WHERE p.name IS NOT NULL), '{}') AS permissions
-            FROM user_roles ur
-            JOIN roles r ON ur.role_id = r.id
-            LEFT JOIN role_permissions rp ON r.id = rp.role_id
-            LEFT JOIN permissions p ON rp.permission_id = p.id
-            GROUP BY ur.user_id, r.id, r.name, r.description, r.level, r.created_at
-        """)
-        
-        # Re-insert default roles
-        await conn.execute("""
-            INSERT INTO roles (name, description, level)
-            VALUES
-                ('admin', 'Administrator with full system access', 100),
-                ('manager', 'Manager with elevated access', 90),
-                ('supervisor', 'Supervisor with team management access', 80),
-                ('technician', 'Technician with project management access', 50)
-            ON CONFLICT (name) DO UPDATE SET level = EXCLUDED.level
-        """)
-        
-        # Re-insert manage_users permission
-        await conn.execute("""
-            INSERT INTO permissions (name, description)
-            VALUES ('manage_users', 'Permission to manage user accounts and access')
-            ON CONFLICT (name) DO NOTHING
-        """)
-        
-        # Re-assign manage_users permission to manager and supervisor
-        await conn.execute("""
-            INSERT INTO role_permissions (role_id, permission_id)
-            SELECT r.id, p.id
-            FROM roles r, permissions p
-            WHERE r.name IN ('manager', 'supervisor') AND p.name = 'manage_users'
-            ON CONFLICT DO NOTHING
-        """)
-        
-        # Re-assign all permissions to admin
-        await conn.execute("""
-            INSERT INTO role_permissions (role_id, permission_id)
-            SELECT r.id, p.id
-            FROM roles r, permissions p
-            WHERE r.name = 'admin'
-            ON CONFLICT DO NOTHING
-        """)
+        # Only truncate tables that exist
+        tables_to_clean = [
+            "project_technicians", "projects", "addresses", 
+            "user_roles", "role_permissions", "permissions", "roles", "users", "companies"
+        ]
+        for table in tables_to_clean:
+            try:
+                await conn.execute(f"TRUNCATE TABLE {table} RESTART IDENTITY CASCADE")
+            except Exception:
+                # Table doesn't exist yet, skip it
+                pass
     
     await pool.close()
 
@@ -151,13 +130,20 @@ async def client(db_pool) -> AsyncGenerator[AsyncClient, None]:
 async def test_user(db_pool) -> UserResponse:
     """Create a test user."""
     user_service = UserService(db_pool)
+    
+    # Get the test company ID
+    async with db_pool.acquire() as conn:
+        company_row = await conn.fetchrow("SELECT id FROM companies WHERE name = 'Test Company'")
+        company_id = company_row['id'] if company_row else None
+    
     user_data = UserCreate(
         email="test@example.com",
         password="TestPass123!@#",
         first_name="Test",
         last_name="User",
         is_active=True,
-        is_superuser=False
+        is_superuser=False,
+        company_id=company_id  # Assign to test company dynamically
     )
     user = await user_service.create_user(user_data)
     return user
@@ -219,6 +205,12 @@ async def admin_token_headers(db_pool):
             """,
             user.id, admin_role['id']
         )
+        # Update user's highest_level field to match admin role level
+        admin_role_level = await conn.fetchval("SELECT level FROM roles WHERE id = $1", admin_role['id'])
+        await conn.execute(
+            "UPDATE users SET highest_level = $1 WHERE id = $2",
+            admin_role_level, user.id
+        )
         # Debug: check user_roles assignment
         user_roles = await conn.fetch("SELECT * FROM user_roles WHERE user_id = $1", user.id)
         print(f"[DEBUG] user_roles for admin user: {user_roles}")
@@ -277,3 +269,77 @@ async def admin_user(db_pool):
     await role_service.assign_roles(user.id, ["admin"], user.id)
     
     return user
+
+@pytest.fixture
+async def supervisor_user(db_pool):
+    """Create a supervisor user for testing."""
+    user_service = UserService(db_pool)
+    user_data = UserCreate(
+        email="supervisor@test.com",
+        password="TestPass123!",
+        first_name="Supervisor",
+        last_name="User",
+        is_active=True,
+        is_superuser=False
+    )
+    user = await user_service.create_user(user_data)
+    
+    # Assign supervisor role
+    role_service = RoleService(db_pool)
+    await role_service.assign_roles(user.id, ["supervisor"], user.id)
+    
+    return user
+
+@pytest.fixture
+async def supervisor_token_headers(db_pool):
+    """Create headers with a supervisor user token."""
+    user_service = UserService(db_pool)
+    
+    # Get the test company ID
+    async with db_pool.acquire() as conn:
+        company_row = await conn.fetchrow("SELECT id FROM companies WHERE name = 'Test Company'")
+        company_id = company_row['id'] if company_row else None
+    
+    user_data = UserCreate(
+        email="supervisor@example.com",
+        password="SupervisorPass123!@#",
+        first_name="Supervisor",
+        last_name="User",
+        is_active=True,
+        is_superuser=False,
+        company_id=company_id
+    )
+    user = await user_service.create_user(user_data)
+    
+    async with db_pool.acquire() as conn:
+        # Get supervisor role id
+        supervisor_role = await conn.fetchrow("SELECT id, name FROM roles WHERE name = 'supervisor'")
+        if supervisor_role is None:
+            raise RuntimeError("Supervisor role not found in test database. Check test DB setup.")
+        # Assign supervisor role to user
+        await conn.execute(
+            """
+            INSERT INTO user_roles (user_id, role_id)
+            VALUES ($1, $2)
+            ON CONFLICT (user_id, role_id) DO NOTHING
+            """,
+            user.id, supervisor_role['id']
+        )
+        # Update user's highest_level field to match supervisor role level
+        supervisor_role_level = await conn.fetchval("SELECT level FROM roles WHERE id = $1", supervisor_role['id'])
+        await conn.execute(
+            "UPDATE users SET highest_level = $1 WHERE id = $2",
+            supervisor_role_level, user.id
+        )
+    
+    access_token = create_access_token(
+        subject=user.email,
+        additional_claims={
+            "is_superuser": False,
+            "roles": [{
+                "id": supervisor_role['id'],
+                "name": supervisor_role['name']
+            }]
+        }
+    )
+    return {"Authorization": f"Bearer {access_token}"}

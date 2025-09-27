@@ -19,8 +19,10 @@ class UserBase(BaseModel):
     email: Optional[EmailStr] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    phone: Optional[str] = None
     is_active: Optional[bool] = None
     is_superuser: Optional[bool] = None
+    company_id: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -36,6 +38,8 @@ class UserCreate(UserBase):
     password: constr(min_length=8)
     first_name: str
     last_name: str
+    phone: Optional[str] = None
+    company_id: Optional[int] = None
 
     @field_validator("password")
     def validate_password_strength(cls, v):
@@ -67,11 +71,12 @@ class PasswordUpdate(BaseModel):
 
 class UserResponse(UserBase):
     id: int
+    company_name: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
-    roles: List[RoleResponse] = Field(default_factory=list)  # <- safer default
+    roles: List[RoleResponse] = Field(default_factory=list)
     is_superuser: bool = False
-    highest_level: int = 0                                    # <- NEW
+    highest_level: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -105,10 +110,14 @@ class UserWithTokens(UserResponse):
 
 class UserInDB(BaseModel):
     id: int
+    company_id: Optional[int] = None
     email: str
     hashed_password: str
     first_name: str
     last_name: str
+    phone: Optional[str] = None
     is_active: bool
     is_superuser: bool
-    highest_level: int = 0   # <- NEW (optional but useful if you load from DB here)
+    highest_level: int = 0
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None

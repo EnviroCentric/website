@@ -215,7 +215,7 @@ async def test_create_user_success(client: AsyncClient, normal_user_token_header
         "is_superuser": False
     }
     response = await client.post("/api/v1/users/", json=user_data, headers=normal_user_token_headers)
-    assert response.status_code == status.HTTP_200_OK
+    assert response.status_code == status.HTTP_201_CREATED
     data = response.json()
     assert data["email"] == user_data["email"]
     assert data["first_name"] == user_data["first_name"]

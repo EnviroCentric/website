@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import UserRoleDisplay from '../components/UserRoleDisplay';
 
 export default function Profile() {
   const { user, isAuthenticated, setUser } = useAuth();
@@ -158,7 +159,10 @@ export default function Profile() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-3xl mx-auto space-y-6">
+        {/* User Role Information */}
+        <UserRoleDisplay showDetails={true} />
+        
         <div className="bg-white dark:bg-gray-800 shadow-lg rounded-lg overflow-hidden">
           {/* Profile Header */}
           <div className="bg-gradient-to-r from-gray-200 to-gray-300 dark:from-blue-900 dark:to-blue-950 px-6 py-8">
