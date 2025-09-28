@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import usePermissions from '../hooks/usePermissions';
+import { formatRoleName, getRoleBadgeClasses } from '../utils/roleUtils';
 
 /**
  * Component to display current user's role information and capabilities
@@ -13,12 +14,6 @@ export default function UserRoleDisplay({ showDetails = false }) {
   if (!permissions.isAuthenticated) {
     return null;
   }
-
-  const formatRoleName = (name) => {
-    return name.split(/[_\s-]+/)
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(' ');
-  };
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
@@ -53,14 +48,17 @@ export default function UserRoleDisplay({ showDetails = false }) {
         </div>
         <div className="flex flex-wrap gap-2">
           {user.roles && user.roles.length > 0 ? (
-            user.roles.map((role) => (
-              <span
-                key={role.id}
-                className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-              >
-                {formatRoleName(role.name)} (Level {role.level})
-              </span>
-            ))
+            user.roles.map((role) => {
+              const badgeClasses = getRoleBadgeClasses(role?.level || 0);
+              return (
+                <span
+                  key={role.id}
+                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badgeClasses}`}
+                >
+                  {formatRoleName(role.name)} (Level {role.level})
+                </span>
+              );
+            })
           ) : (
             <span className="text-sm text-gray-500 dark:text-gray-400">No roles assigned</span>
           )}

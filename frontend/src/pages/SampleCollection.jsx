@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import Modal from '../components/Modal';
+import { formatDate, formatPSTTime } from '../utils/dateUtils';
 
 export default function SampleCollection() {
   const { projectId, addressId } = useParams();
@@ -73,11 +74,7 @@ export default function SampleCollection() {
     setTimeout(() => setNotification(null), 3000);
   };
 
-  // Helper: format time in PST 12-hour
-  const formatPSTTime = (date) => {
-    if (!date) return '--:--';
-    return new Date(date).toLocaleTimeString('en-US', { timeZone: 'America/Los_Angeles', hour: '2-digit', minute: '2-digit', hour12: true });
-  };
+  // Helper: format timer duration
   const formatTimer = (t) => {
     const h = Math.floor(t / 3600).toString().padStart(2, '0');
     const m = Math.floor((t % 3600) / 60).toString().padStart(2, '0');
@@ -172,7 +169,7 @@ export default function SampleCollection() {
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-8">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-2">
           <div className="text-lg font-semibold text-gray-800 dark:text-white">{address?.name}</div>
-          <div className="text-gray-500 dark:text-gray-400">{address ? new Date(address.date).toLocaleDateString() : ''}</div>
+          <div className="text-gray-500 dark:text-gray-400">{formatDate(address?.date)}</div>
         </div>
         <div className="overflow-x-auto rounded-lg">
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -514,8 +511,8 @@ function DetailsModalContent({ sample, onClose, onUpdate, showNotification, time
           )}
         </div>
         <div className="flex space-x-6 mt-2">
-          <div>Start: <span className="font-mono">{form.start_time ? new Date(form.start_time).toLocaleTimeString() : '--:--'}</span></div>
-          <div>End: <span className="font-mono">{form.stop_time ? new Date(form.stop_time).toLocaleTimeString() : '--:--'}</span></div>
+          <div>Start: <span className="font-mono">{formatPSTTime(form.start_time)}</span></div>
+          <div>End: <span className="font-mono">{formatPSTTime(form.stop_time)}</span></div>
         </div>
       </div>
       {showResetConfirm && (

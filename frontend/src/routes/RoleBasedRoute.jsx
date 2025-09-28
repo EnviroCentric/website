@@ -218,3 +218,53 @@ export function RequireSuperuser({ children, showForbidden = false }) {
     </RoleBasedRoute>
   );
 }
+
+/**
+ * Require Client role with company assignment (but not admin)
+ */
+export function RequireClient({ children, showForbidden = false }) {
+  const { user, isAuthenticated, loading } = useAuth();
+  
+  // Show loading spinner while authentication is being checked
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
+  // Redirect to login if not authenticated
+  if (!isAuthenticated) {
+    return <Navigate to="/" replace />;
+  }
+  
+  // Check if user has Client role, is assigned to a company, and is NOT admin
+  const hasClientRole = user?.roles?.some(role => role.name.toLowerCase() === 'client');
+  const userRoleLevel = Math.max(...(user?.roles?.map(role => role.level) || [0]));
+  const isAdmin = userRoleLevel >= 100;
+  const isValidClient = hasClientRole && user?.company_id && !isAdmin;
+  
+  if (!isValidClient) {
+    if (showForbidden) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+          <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 bg-red-100 dark:bg-red-900 rounded-full flex items-center justify-center">
+              <svg className="w-8 h-8 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0h3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 8v-5a1 1 0 011-1h4a1 1 0 011 1v5m-6 0v-5" />
+              </svg>
+            </div>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Client Access Required</h1>
+            <p className="text-gray-600 dark:text-gray-400">
+              You must have the Client role and be assigned to a company to view this page.
+            </p>
+          </div>
+        </div>
+      );
+    }
+    return <Navigate to="/" replace />;
+  }
+  
+  return children;
+}

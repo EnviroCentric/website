@@ -148,6 +148,18 @@ class UserService:
             rows = await conn.fetch(query_manager.get_all_users)
             return [UserResponse(**dict(row)) for row in rows]
     
+    async def get_users_by_min_role_level(self, min_level: int) -> List[UserResponse]:
+        """Get all active users with role level >= min_level."""
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query_manager.get_users_by_min_role_level, min_level)
+            return [UserResponse(**dict(row)) for row in rows]
+    
+    async def get_employees_minimal(self, min_level: int) -> List[dict]:
+        """Get minimal employee data (id, name, roles) with role level >= min_level."""
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query_manager.get_employees_minimal, min_level)
+            return [dict(row) for row in rows]
+    
     async def get_user_by_id_with_password(self, user_id: int) -> Optional[UserInDB]:
         """Get a user by ID including their hashed password."""
         async with self.pool.acquire() as conn:

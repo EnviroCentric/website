@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useRoles } from '../context/RolesContext';
 import api from '../services/api';
 import Modal from '../components/Modal';
+import { formatDate } from '../utils/dateUtils';
 
 export default function ProjectDashboard() {
   const [project, setProject] = useState(null);
@@ -28,14 +29,6 @@ export default function ProjectDashboard() {
   const isSupervisorOrHigher = userRoleLevel >= 80; // Supervisor level is 80
 
   const today = new Date().toISOString().slice(0, 10);
-
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    const mm = String(date.getMonth() + 1).padStart(2, '0');
-    const dd = String(date.getDate()).padStart(2, '0');
-    const yyyy = date.getFullYear();
-    return `${mm}/${dd}/${yyyy}`;
-  };
 
   useEffect(() => {
     fetchProjectDetails();

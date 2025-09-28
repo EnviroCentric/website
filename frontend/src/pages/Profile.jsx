@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import UserRoleDisplay from '../components/UserRoleDisplay';
+import { formatDate } from '../utils/dateUtils';
+import { formatRoleName, getRoleBadgeClasses } from '../utils/roleUtils';
 
 export default function Profile() {
   const { user, isAuthenticated, setUser } = useAuth();
@@ -77,7 +78,7 @@ export default function Profile() {
   const handleNameSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/users/me`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/users/me`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -116,11 +117,11 @@ export default function Profile() {
     }
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/users/self/password`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/users/me/password`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
         body: JSON.stringify({
           current_password: formData.current_password,
@@ -160,9 +161,6 @@ export default function Profile() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto space-y-6">
-        {/* User Role Information */}
-        <UserRoleDisplay showDetails={true} />
-        
         <div className="bg-white dark:bg-gray-800 shadow-lg rounded-lg overflow-hidden">
           {/* Profile Header */}
           <div className="bg-gradient-to-r from-gray-200 to-gray-300 dark:from-blue-900 dark:to-blue-950 px-6 py-8">
@@ -251,17 +249,37 @@ export default function Profile() {
               <div className="space-y-4">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-blue-200">Account Information</h2>
                 <div className="space-y-2">
+                  {user.roles && user.roles.length > 0 && (
+                    <div>
+                      <label className="text-sm text-gray-700 dark:text-blue-300">Current Role{user.roles.length > 1 ? 's' : ''}</label>
+                      <div className="mt-1">
+                        <div className="flex flex-wrap gap-1">
+                          {user.roles.map((role) => {
+                            const badgeClasses = getRoleBadgeClasses(role?.level || 0);
+                            return (
+                              <span
+                                key={role.id}
+                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badgeClasses}`}
+                              >
+                                {formatRoleName(role.name)}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <label className="text-sm text-gray-700 dark:text-blue-300">Account Created</label>
                     <p className="text-base font-medium text-gray-900 dark:text-blue-100">
-                      {user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}
+                      {formatDate(user.created_at)}
                     </p>
                   </div>
                   {user.updated_at && user.updated_at !== user.created_at && (
                     <div>
                       <label className="text-sm text-gray-700 dark:text-blue-300">Last Updated</label>
                       <p className="text-base font-medium text-gray-900 dark:text-blue-100">
-                        {new Date(user.updated_at).toLocaleDateString()}
+                        {formatDate(user.updated_at)}
                       </p>
                     </div>
                   )}

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useRoles } from '../context/RolesContext';
+import { formatRoleName, formatRoleDescription, getRoleBadgeClasses } from '../utils/roleUtils';
 
 export default function UserManagement() {
   const { token, isAuthenticated, user: currentUser, refreshUserData } = useAuth();
@@ -20,6 +21,7 @@ export default function UserManagement() {
   });
   const [hasAccess, setHasAccess] = useState(false);
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const fetchInProgress = useRef(false);
   const lastFetchTime = useRef(0);
   const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes in milliseconds
@@ -196,6 +198,36 @@ export default function UserManagement() {
     return `${firstName} ${lastName}`.trim() || 'Unnamed User';
   };
 
+  // Smart search function that matches individual letters from names
+  const smartSearch = (text, searchTerm) => {
+    if (!searchTerm.trim()) return true;
+    const cleanText = text.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanSearch = searchTerm.toLowerCase().replace(/[^a-z0-9]/g, '');
+    
+    // Regular substring match first
+    if (cleanText.includes(cleanSearch)) return true;
+    
+    // Smart letter matching - check if all search letters exist in the text
+    const searchChars = cleanSearch.split('');
+    let textIndex = 0;
+    
+    for (const char of searchChars) {
+      const found = cleanText.indexOf(char, textIndex);
+      if (found === -1) return false;
+      textIndex = found + 1;
+    }
+    return true;
+  };
+
+  // Filter users based on search term (names only)
+  const filteredUsers = users.filter(user => {
+    if (!searchTerm.trim()) return true;
+    
+    const fullName = formatUserName(user);
+    
+    return smartSearch(fullName, searchTerm);
+  });
+
   // Update the role selection handler
   const handleRoleChange = (role, checked) => {
     const roleId = role?.id || role?.role_id;
@@ -216,16 +248,17 @@ export default function UserManagement() {
     if (!Array.isArray(user.roles)) {
       return null;
     }
-    return user.roles.map((role, index) => (
-      <span
-        key={`user-${user.id}-role-${role?.id || role?.role_id || index}`}
-        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-      >
-        {(role?.name || 'Unnamed Role').split(' ')
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-          .join(' ')}
-      </span>
-    ));
+    return user.roles.map((role, index) => {
+      const badgeClasses = getRoleBadgeClasses(role?.level || 0);
+      return (
+        <span
+          key={`user-${user.id}-role-${role?.id || role?.role_id || index}`}
+          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badgeClasses}`}
+        >
+          {formatRoleName(role?.name)}
+        </span>
+      );
+    });
   };
 
   // Update the role selection section in the edit modal
@@ -250,14 +283,12 @@ export default function UserManagement() {
                     className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600"
                   />
                   <span className="ml-3 text-sm font-medium text-gray-900 dark:text-white">
-                    {(role?.name || 'Unnamed Role').split(' ')
-                      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-                      .join(' ')}
+                    {formatRoleName(role?.name)}
                   </span>
                 </div>
                 {role?.description && (
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    {role.description.charAt(0).toUpperCase() + role.description.slice(1)}
+                    {formatRoleDescription(role.description)}
                   </p>
                 )}
               </div>
@@ -316,6 +347,23 @@ export default function UserManagement() {
                 Refresh
               </button>
             </div>
+            {/* Search Bar */}
+            <div className="mt-4">
+              <div className="relative max-w-md">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search users by name..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
           </div>
 
           {/* Content */}
@@ -342,7 +390,7 @@ export default function UserManagement() {
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                  {users.map((user) => (
+                  {filteredUsers.map((user) => (
                     <tr key={user.id}>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900 dark:text-white">
@@ -568,16 +616,17 @@ export default function UserManagement() {
                         {editedUser.roles.length > 0 ? (
                           roles
                             .filter(role => editedUser.roles.includes(role?.id || role?.role_id))
-                            .map((role, index) => (
-                              <span
-                                key={`selected-role-${role?.id || role?.role_id || index}`}
-                                className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-                              >
-                                {(role?.name || 'Unnamed Role').split(' ')
-                                  .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-                                  .join(' ')}
-                              </span>
-                            ))
+                            .map((role, index) => {
+                              const badgeClasses = getRoleBadgeClasses(role?.level || 0);
+                              return (
+                                <span
+                                  key={`selected-role-${role?.id || role?.role_id || index}`}
+                                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badgeClasses}`}
+                                >
+                                  {formatRoleName(role?.name)}
+                                </span>
+                              );
+                            })
                         ) : (
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
                             No Roles

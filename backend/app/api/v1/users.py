@@ -5,7 +5,7 @@ import asyncpg
 from app.db.session import get_db
 from app.core.security import get_current_user
 from app.core.validators import validate_password
-from app.schemas.user import UserResponse, UserCreate, UserUpdate, PasswordUpdate
+from app.schemas.user import UserResponse, UserCreate, UserUpdate, PasswordUpdate, EmployeeResponse
 from app.schemas.role import RoleInDB  # <- use your Role schema for stronger typing
 from app.services.users import UserService
 from app.db.queries.manager import query_manager
@@ -73,6 +73,28 @@ async def list_users(
         )
     users = await UserService(db).get_all_users()
     return users
+
+
+@router.get("/employees", response_model=List[EmployeeResponse])
+async def list_employees(
+    current_user: dict = Depends(get_current_user),
+    db: asyncpg.Pool = Depends(get_db),
+):
+    """
+    List all employees (users with field tech roles and higher - level >= 50).
+    Returns minimal data: id, name, and roles only.
+    Used for project assignment. Accessible to supervisors and higher.
+    """
+    cu = UserResponse(**current_user)
+    if not (_is_superuser(cu) or _highest_role_level(cu) >= MANAGE_USER_LVL):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient role level to view employees",
+        )
+    
+    service = UserService(db)
+    employees_data = await service.get_employees_minimal(50)  # field_tech level and higher
+    return [EmployeeResponse(**emp) for emp in employees_data]
 
 
 # ---------- self ----------

@@ -28,8 +28,13 @@ class UserBase(BaseModel):
 
     @field_validator("first_name", "last_name")
     def validate_name(cls, v):
-        if v is not None and v.strip() == "":
-            raise ValueError("Name cannot be empty")
+        if v is not None:
+            # Strip whitespace and normalize to lowercase
+            v = v.strip()
+            if v == "":
+                raise ValueError("Name cannot be empty")
+            # Normalize to lowercase for database consistency
+            v = v.lower()
         return v
 
 
@@ -106,6 +111,25 @@ class UserWithTokens(UserResponse):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
+
+
+class EmployeeResponse(BaseModel):
+    id: int
+    first_name: str
+    last_name: str
+    roles: List[RoleResponse] = Field(default_factory=list)
+    
+    model_config = ConfigDict(from_attributes=True)
+    
+    @field_validator("roles", mode="before")
+    def parse_roles(cls, v):
+        if isinstance(v, str):
+            try:
+                import json
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return []
+        return v or []
 
 
 class UserInDB(BaseModel):

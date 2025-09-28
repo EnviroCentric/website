@@ -163,3 +163,71 @@ SET
   hashed_password = $2,
   updated_at = CURRENT_TIMESTAMP
 WHERE id = $1;
+
+-- name: get_users_by_min_role_level
+SELECT
+  u.id,
+  u.company_id,
+  c.name as company_name,
+  u.email,
+  u.first_name,
+  u.last_name,
+  u.phone,
+  u.is_active,
+  u.is_superuser,
+  u.highest_level,
+  u.created_at,
+  u.updated_at,
+  COALESCE(
+    json_agg(
+      json_build_object(
+        'id', r.id,
+        'name', r.name,
+        'description', r.description,
+        'level', r.level,
+        'created_at', r.created_at
+      )
+    ) FILTER (WHERE r.id IS NOT NULL),
+    '[]'::json
+  )::jsonb AS roles
+FROM users u
+LEFT JOIN companies c ON u.company_id = c.id
+LEFT JOIN user_roles ur ON ur.user_id = u.id
+LEFT JOIN roles r ON r.id = ur.role_id
+WHERE u.is_active = true
+  AND u.highest_level >= $1
+GROUP BY u.id, c.name
+ORDER BY u.first_name, u.last_name;
+
+-- name: get_employees_minimal
+SELECT
+  u.id,
+  u.first_name,
+  u.last_name,
+  COALESCE(
+    json_agg(
+      json_build_object(
+        'id', r.id,
+        'name', r.name,
+        'description', r.description,
+        'level', r.level,
+        'created_at', r.created_at
+      )
+    ) FILTER (WHERE r.id IS NOT NULL),
+    '[]'::json
+  )::jsonb AS roles
+FROM users u
+LEFT JOIN user_roles ur ON ur.user_id = u.id
+LEFT JOIN roles r ON r.id = ur.role_id
+WHERE u.is_active = true
+  AND (
+    u.is_superuser = true 
+    OR EXISTS (
+      SELECT 1 FROM user_roles ur2 
+      JOIN roles r2 ON ur2.role_id = r2.id 
+      WHERE ur2.user_id = u.id 
+      AND r2.level >= $1
+    )
+  )
+GROUP BY u.id
+ORDER BY u.first_name, u.last_name;

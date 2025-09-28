@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useRoles } from '../context/RolesContext';
 import api from '../services/api';
+import { formatDate } from '../utils/dateUtils';
 
 export default function Dashboard() {
   const [projects, setProjects] = useState([]);
@@ -36,13 +37,6 @@ export default function Dashboard() {
     }
   };
 
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    const mm = String(date.getMonth() + 1).padStart(2, '0');
-    const dd = String(date.getDate()).padStart(2, '0');
-    const yyyy = date.getFullYear();
-    return `${mm}/${dd}/${yyyy}`;
-  };
 
   const handleProjectClick = (projectId) => {
     navigate(`/projects/${projectId}`);

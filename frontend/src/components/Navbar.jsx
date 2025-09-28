@@ -11,7 +11,9 @@ const navigation = [
   { name: "Home", href: "/", current: true },
   { name: "Services", href: "/services", current: false },
   { name: "Dashboard", href: "/dashboard", current: false, requiresTechnician: true },
-  { name: "Projects", href: "/projects", current: false, requiresSupervisor: true }
+  { name: "My Company", href: "/company/me", current: false, requiresClient: true },
+  { name: "Projects", href: "/projects", current: false, requiresSupervisor: true },
+  { name: "Companies", href: "/companies", current: false, requiresAdmin: true }
 ];
 
 const userMenuOptions = [
@@ -42,6 +44,9 @@ export default function Navbar() {
   const isSuperuser = user?.is_superuser || user?.roles?.some(role => role.name.toLowerCase() === 'admin');
   const userRoleLevel = Math.max(...(user?.roles?.map(role => role.level) || [0]));
   const isTechnicianOrHigher = userRoleLevel >= 50; // Technician level is 50
+  const isAdmin = userRoleLevel >= 100; // Admin level is 100
+  const hasClientRole = user?.roles?.some(role => role.name.toLowerCase() === 'client');
+  const isClient = hasClientRole && user?.company_id && !isAdmin; // Must have Client role, be assigned to a company, and NOT be admin
 
   const getUserInitials = () => {
     if (!user?.first_name && !user?.last_name) return null;
@@ -195,6 +200,12 @@ export default function Navbar() {
                 <div className="ml-2 flex items-center space-x-4">
                   {navigation
                     .filter(item => {
+                      if (item.requiresAdmin) {
+                        return isAdmin; // Admin level is 100
+                      }
+                      if (item.requiresClient) {
+                        return isClient; // Client role with company assignment and not admin
+                      }
                       if (item.requiresSupervisor) {
                         return userRoleLevel >= 80; // Supervisor level is 80
                       }

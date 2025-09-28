@@ -9,7 +9,7 @@ import Profile from './pages/Profile';
 import ProfileEdit from './pages/ProfileEdit';
 import ProfilePassword from './pages/ProfilePassword';
 import ProtectedRoute from './routes/ProtectedRoute';
-import RoleBasedRoute, { RequireTechnician, RequireSupervisor, RequireAdmin } from './routes/RoleBasedRoute';
+import RoleBasedRoute, { RequireTechnician, RequireSupervisor, RequireAdmin, RequireClient } from './routes/RoleBasedRoute';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import UserManagement from './pages/UserManagement';
@@ -17,6 +17,9 @@ import Projects from './pages/Projects';
 import ProjectDashboard from './pages/ProjectDashboard';
 import SampleCollection from './pages/SampleCollection';
 import ServiceInfo from './pages/ServiceInfo';
+import CompanyManagement from './pages/CompanyManagement';
+import CompanyDetails from './pages/CompanyDetails';
+import CompanyDashboard from './pages/CompanyDashboard';
 
 import { RolesProvider } from './context/RolesContext';
 import { PermissionsProvider } from './context/PermissionsContext';
@@ -108,6 +111,34 @@ function App() {
                       <RoleBasedRoute minLevel={80} showForbidden={true}>
                         <UserManagement />
                       </RoleBasedRoute>
+                    }
+                  />
+                  
+                  {/* Company Management - Requires Admin level (100) */}
+                  <Route
+                    path="/companies"
+                    element={
+                      <RequireAdmin showForbidden={true}>
+                        <CompanyManagement />
+                      </RequireAdmin>
+                    }
+                  />
+                  <Route
+                    path="/companies/:companyId"
+                    element={
+                      <RequireAdmin showForbidden={true}>
+                        <CompanyDetails />
+                      </RequireAdmin>
+                    }
+                  />
+                  
+                  {/* Client Company Dashboard - Requires Client role with company assignment */}
+                  <Route
+                    path="/company/me"
+                    element={
+                      <RequireClient showForbidden={true}>
+                        <CompanyDashboard />
+                      </RequireClient>
                     }
                   />
                 </Routes>
