@@ -15,7 +15,7 @@ const CompanyDetails = () => {
   const [error, setError] = useState('');
   const [isAssignUserModalOpen, setIsAssignUserModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [selectedUserId, setSelectedUserId] = useState('');
+  const [selectedUserIds, setSelectedUserIds] = useState([]);
   const [userSearchTerm, setUserSearchTerm] = useState('');
   const [companyData, setCompanyData] = useState({
     name: '',
@@ -80,23 +80,27 @@ const CompanyDetails = () => {
     }
   };
 
-  const handleAssignUser = async () => {
-    if (!selectedUserId) return;
+  const handleAssignUsers = async () => {
+    if (selectedUserIds.length === 0) return;
 
     try {
-      // Update user's company_id - we'll need to use the user update endpoint
-      await api.patch(`/api/v1/users/${selectedUserId}`, {
-        company_id: parseInt(companyId)
-      });
+      // Update multiple users' company_id - we'll need to use the user update endpoint for each
+      const assignmentPromises = selectedUserIds.map(userId => 
+        api.patch(`/api/v1/users/${userId}`, {
+          company_id: parseInt(companyId)
+        })
+      );
+      
+      await Promise.all(assignmentPromises);
       
       await fetchCompanyDetails();
       await fetchAllUsers();
       setIsAssignUserModalOpen(false);
-      setSelectedUserId('');
+      setSelectedUserIds([]);
       setUserSearchTerm('');
     } catch (err) {
-      setError('Failed to assign user to company');
-      console.error('Error assigning user:', err);
+      setError(`Failed to assign ${selectedUserIds.length > 1 ? 'users' : 'user'} to company`);
+      console.error('Error assigning users:', err);
     }
   };
 
@@ -159,6 +163,21 @@ const CompanyDetails = () => {
       zip: ''
     });
   };
+
+  const handleClientToggle = (userId) => {
+    setSelectedUserIds(prev => {
+      if (prev.includes(userId)) {
+        return prev.filter(id => id !== userId);
+      } else {
+        return [...prev, userId];
+      }
+    });
+  };
+
+  const isClientSelected = (userId) => {
+    return selectedUserIds.includes(userId);
+  };
+
 
 
 
@@ -356,75 +375,125 @@ const CompanyDetails = () => {
         </div>
       </div>
 
-      {/* Assign User Modal */}
+      {/* Assign Clients Modal */}
       <Modal
         isOpen={isAssignUserModalOpen}
         onClose={() => {
           setIsAssignUserModalOpen(false);
-          setSelectedUserId('');
+          setSelectedUserIds([]);
           setUserSearchTerm('');
         }}
-        title="Assign Client to Company"
+        title="Assign Clients to Company"
       >
         <div className="space-y-4">
+          {/* Search Bar */}
           <div>
-            <label htmlFor="userSearch" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            <label htmlFor="userSearch" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Search Clients
             </label>
-            <input
-              type="text"
-              id="userSearch"
-              value={userSearchTerm}
-              onChange={(e) => setUserSearchTerm(e.target.value)}
-              placeholder="Search by name or email..."
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white px-4 py-2"
-            />
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <input
+                type="text"
+                id="userSearch"
+                value={userSearchTerm}
+                onChange={(e) => setUserSearchTerm(e.target.value)}
+                placeholder="Search by name or email..."
+                className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
           </div>
 
-          <div>
-            <label htmlFor="userSelect" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Select Client
-            </label>
-            <select
-              id="userSelect"
-              value={selectedUserId}
-              onChange={(e) => setSelectedUserId(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white px-4 py-2"
-            >
-              <option value="">Select a client...</option>
-              {filteredUsers.map((availableUser) => (
-                <option key={availableUser.id} value={availableUser.id}>
-                  {availableUser.first_name} {availableUser.last_name} ({availableUser.email})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {filteredUsers.length === 0 && (
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              {userSearchTerm.trim() ? 'No clients match your search' : 'No available clients to assign'}
-            </p>
+          {/* Selection Summary */}
+          {selectedUserIds.length > 0 && (
+            <div className="bg-blue-50 dark:bg-blue-900 p-3 rounded-md">
+              <p className="text-sm text-blue-800 dark:text-blue-200">
+                {selectedUserIds.length} client{selectedUserIds.length !== 1 ? 's' : ''} selected
+              </p>
+            </div>
           )}
+
+          {/* Client List */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Available Clients
+            </label>
+            <div className="border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 max-h-64 overflow-y-auto">
+              {filteredUsers.length === 0 ? (
+                <div className="p-4 text-center">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {userSearchTerm.trim() ? 'No clients match your search' : 'No available clients to assign'}
+                  </p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-200 dark:divide-gray-600">
+                  {filteredUsers.map((availableUser) => (
+                    <div key={availableUser.id} className="p-3 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isClientSelected(availableUser.id)}
+                          onChange={() => handleClientToggle(availableUser.id)}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 rounded"
+                        />
+                        <div className="ml-3 flex-1">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                {availableUser.first_name} {availableUser.last_name}
+                              </p>
+                              <p className="text-sm text-gray-500 dark:text-gray-400">
+                                {availableUser.email}
+                              </p>
+                            </div>
+                            {isClientSelected(availableUser.id) && (
+                              <div className="ml-2">
+                                <svg className="h-5 w-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
-        <div className="flex justify-end space-x-3 pt-4">
-          <button
-            onClick={() => {
-              setIsAssignUserModalOpen(false);
-              setSelectedUserId('');
-              setUserSearchTerm('');
-            }}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleAssignUser}
-            disabled={!selectedUserId}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
-          >
-            Assign Client
-          </button>
+        <div className="flex justify-between items-center pt-4">
+          <div className="text-sm text-gray-500 dark:text-gray-400">
+            {selectedUserIds.length > 0 
+              ? `${selectedUserIds.length} client${selectedUserIds.length !== 1 ? 's' : ''} will be assigned`
+              : 'Select clients to assign to this company'
+            }
+          </div>
+          <div className="flex space-x-3">
+            <button
+              onClick={() => {
+                setIsAssignUserModalOpen(false);
+                setSelectedUserIds([]);
+                setUserSearchTerm('');
+              }}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleAssignUsers}
+              disabled={selectedUserIds.length === 0}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
+            >
+              Assign {selectedUserIds.length > 0 ? `${selectedUserIds.length} ` : ''}Client{selectedUserIds.length !== 1 ? 's' : ''}
+            </button>
+          </div>
         </div>
       </Modal>
 

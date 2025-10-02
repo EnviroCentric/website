@@ -230,4 +230,35 @@ class ProjectService:
                 address_id
             )
             return bool(result)
+
+    # Project technician assignment methods (separate from visits)
+    async def assign_technician_to_project(self, project_id: int, technician_id: int, assigned_by: int) -> Optional[Dict]:
+        """Assign a technician to a project for access control."""
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                query_manager.assign_technician_to_project,
+                project_id,
+                technician_id,
+                assigned_by
+            )
+            return dict(row) if row else None
+
+    async def unassign_technician_from_project(self, project_id: int, technician_id: int) -> bool:
+        """Remove a technician's assignment from a project."""
+        async with self.pool.acquire() as conn:
+            result = await conn.execute(
+                query_manager.unassign_technician_from_project,
+                project_id,
+                technician_id
+            )
+            return result == "DELETE 1"
+
+    async def list_technician_assigned_projects(self, technician_id: int) -> List[Dict]:
+        """List projects that a technician is directly assigned to."""
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                query_manager.list_technician_assigned_projects,
+                technician_id
+            )
+            return [dict(row) for row in rows]
     

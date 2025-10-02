@@ -100,9 +100,10 @@ export default function Projects() {
     if (!searchTerm.trim()) return true;
     
     const projectName = project.name?.toLowerCase() || '';
+    const companyName = project.company_name?.toLowerCase() || '';
     const search = searchTerm.toLowerCase();
     
-    return projectName.includes(search);
+    return projectName.includes(search) || companyName.includes(search);
   });
 
   // Smart search function that matches individual letters from roles and name
@@ -223,7 +224,7 @@ export default function Projects() {
           </div>
           <input
             type="text"
-            placeholder="Search projects by name..."
+            placeholder="Search projects by name or company..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -268,6 +269,13 @@ export default function Projects() {
               <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
                 {capitalizeProjectName(project.name)}
               </h3>
+              {project.company_name && (
+                <div className="mb-2">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                    {project.company_name}
+                  </span>
+                </div>
+              )}
               <p className="text-gray-500 dark:text-gray-400">
                 Created: {formatDate(project.created_at)}
               </p>

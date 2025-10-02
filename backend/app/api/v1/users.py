@@ -69,7 +69,7 @@ async def list_users(
     if not (_is_superuser(cu) or _highest_role_level(cu) >= MANAGE_USER_LVL):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient role level to view all users",
+            detail="Insufficient permissions to view all users",
         )
     users = await UserService(db).get_all_users()
     return users
@@ -89,7 +89,7 @@ async def list_employees(
     if not (_is_superuser(cu) or _highest_role_level(cu) >= MANAGE_USER_LVL):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient role level to view employees",
+            detail="Insufficient permissions to view employees",
         )
     
     service = UserService(db)
@@ -229,7 +229,7 @@ async def patch_user(
     cu = UserResponse(**current_user)
     can_update = _is_superuser(cu) or _highest_role_level(cu) >= MANAGE_USER_LVL or (cu.id == user_id)
     if not can_update:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient role level to update user")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions to update user")
 
     service = UserService(db)
     # If changing email, enforce uniqueness
@@ -266,7 +266,7 @@ async def assign_roles(
 
     # Gate by role level or superuser
     if not (_is_superuser(cu) or _highest_role_level(cu) >= MANAGE_USER_LVL):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient role level to assign roles")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions to assign roles")
 
     # Verify target user exists
     user = await db.fetchrow(query_manager.get_user_by_id, user_id)
@@ -288,7 +288,7 @@ async def assign_roles(
         if not _is_superuser(cu) and role["level"] >= current_user_highest_level:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Cannot assign role '{role['name']}' at level {role['level']}",
+                detail="Insufficient permissions to assign this role",
             )
         role_rows.append(role)
 

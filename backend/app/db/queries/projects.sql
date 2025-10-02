@@ -129,20 +129,36 @@ RETURNING *;
 DELETE FROM project_visits WHERE id = $1;
 
 -- name: get_project_technicians
-SELECT DISTINCT 
+SELECT 
     u.id,
     u.first_name,
     u.last_name,
     u.email,
-    u.phone
+    u.phone,
+    u.highest_level,
+    pt.assigned_at,
+    COALESCE(
+        JSON_AGG(
+            JSON_BUILD_OBJECT(
+                'id', r.id,
+                'name', r.name,
+                'level', r.level
+            )
+        ) FILTER (WHERE r.id IS NOT NULL),
+        '[]'::json
+    ) as roles
 FROM users u
-JOIN project_visits pv ON u.id = pv.technician_id
-WHERE pv.project_id = $1;
+JOIN project_technicians pt ON u.id = pt.technician_id
+LEFT JOIN user_roles ur ON u.id = ur.user_id
+LEFT JOIN roles r ON ur.role_id = r.id
+WHERE pt.project_id = $1
+GROUP BY u.id, u.first_name, u.last_name, u.email, u.phone, u.highest_level, pt.assigned_at
+ORDER BY pt.assigned_at DESC;
 
 -- name: check_technician_assigned_to_project
 SELECT EXISTS(
     SELECT 1 
-    FROM project_visits 
+    FROM project_technicians 
     WHERE project_id = $1 AND technician_id = $2
 ) as is_assigned;
 
@@ -152,3 +168,23 @@ SELECT EXISTS(
     FROM project_visits
     WHERE project_id = $1 AND address_id = $2
 ) as is_project_address;
+
+-- Project technician assignment queries (separate from visits)
+-- name: assign_technician_to_project
+INSERT INTO project_technicians (project_id, technician_id, assigned_by)
+VALUES ($1, $2, $3)
+ON CONFLICT (project_id, technician_id) DO NOTHING
+RETURNING *;
+
+-- name: unassign_technician_from_project
+DELETE FROM project_technicians 
+WHERE project_id = $1 AND technician_id = $2
+RETURNING *;
+
+-- name: list_technician_assigned_projects
+SELECT DISTINCT p.*, c.name as company_name
+FROM projects p
+LEFT JOIN companies c ON p.company_id = c.id
+JOIN project_technicians pt ON p.id = pt.project_id
+WHERE pt.technician_id = $1
+ORDER BY p.created_at DESC;

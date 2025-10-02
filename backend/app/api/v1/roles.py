@@ -39,7 +39,7 @@ async def create_role(
     if not (current_user_model.is_superuser or any(role.permissions and "manage_roles" in role.permissions for role in current_user_model.roles)):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions to create roles"
+            detail="Insufficient permissions to create roles"
         )
     
     role_service = RoleService(db)
@@ -59,7 +59,7 @@ async def update_role(
     if not (current_user_model.is_superuser or any(role.permissions and "manage_roles" in role.permissions for role in current_user_model.roles)):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions to update roles"
+            detail="Insufficient permissions to update roles"
         )
     
     role_service = RoleService(db)
@@ -83,7 +83,7 @@ async def delete_role(
     if not (current_user_model.is_superuser or any(role.permissions and "manage_roles" in role.permissions for role in current_user_model.roles)):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions to delete roles"
+            detail="Insufficient permissions to delete roles"
         )
     
     role_service = RoleService(db)
@@ -127,7 +127,7 @@ async def assign_user_role(
     if not current_user_model.is_superuser and role_level < 100:  # Admin level required
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can assign roles"
+            detail="Insufficient permissions to assign roles"
         )
     
     # Assign role by ID directly to database

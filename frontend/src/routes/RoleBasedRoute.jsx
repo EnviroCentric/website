@@ -50,7 +50,7 @@ export default function RoleBasedRoute({
               </svg>
             </div>
             <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Access Denied</h1>
-            <p className="text-gray-600 dark:text-gray-400">Superuser access required to view this page.</p>
+            <p className="text-gray-600 dark:text-gray-400">You do not have the required permissions to access this page.</p>
           </div>
         </div>
       );
@@ -77,7 +77,7 @@ export default function RoleBasedRoute({
                   </div>
                   <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Insufficient Permissions</h1>
                   <p className="text-gray-600 dark:text-gray-400">
-                    Your role level ({userHighestLevel}) is below the required level ({minLevel}) to access this page.
+                    You do not have the required permissions to access this page.
                   </p>
                 </div>
               </div>
@@ -105,9 +105,9 @@ export default function RoleBasedRoute({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18.364 5.636M5.636 18.364l12.728-12.728" />
                 </svg>
               </div>
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Role Access Required</h1>
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Access Denied</h1>
               <p className="text-gray-600 dark:text-gray-400">
-                You need one of the following roles: {allowedRoles.join(', ')}
+                You do not have the required permissions to access this page.
               </p>
             </div>
           </div>
@@ -134,9 +134,9 @@ export default function RoleBasedRoute({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                 </svg>
               </div>
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Missing Permissions</h1>
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Access Denied</h1>
               <p className="text-gray-600 dark:text-gray-400">
-                You need the following permissions: {requiredPermissions.join(', ')}
+                You do not have the required permissions to access this page.
               </p>
             </div>
           </div>
@@ -255,9 +255,9 @@ export function RequireClient({ children, showForbidden = false }) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0h3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 8v-5a1 1 0 011-1h4a1 1 0 011 1v5m-6 0v-5" />
               </svg>
             </div>
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Client Access Required</h1>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Access Denied</h1>
             <p className="text-gray-600 dark:text-gray-400">
-              You must have the Client role and be assigned to a company to view this page.
+              You do not have the required permissions to access this page.
             </p>
           </div>
         </div>

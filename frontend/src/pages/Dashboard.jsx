@@ -91,6 +91,13 @@ export default function Dashboard() {
               <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
                 {project.name}
               </h3>
+              {project.company_name && (
+                <div className="mb-2">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                    {project.company_name}
+                  </span>
+                </div>
+              )}
               <p className="text-gray-500 dark:text-gray-400">
                 Created: {formatDate(project.created_at)}
               </p>

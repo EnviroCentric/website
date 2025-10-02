@@ -40,12 +40,16 @@ async def create_project(
         )
     
     # Superusers can create projects for any company
-    # Company users can only create projects for their own company
-    if current_user.company_id is not None and project_in.company_id != current_user.company_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only create projects for your own company"
-        )
+    if current_user.is_superuser:
+        pass  # No restrictions
+    # Client users can only create projects for their own company
+    elif current_user.company_id is not None:
+        if project_in.company_id != current_user.company_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only create projects for your own company"
+            )
+    # Employee users - no company restrictions
     
     return await project_service.create_project(project_in)
 
@@ -69,26 +73,32 @@ async def get_project(
     role_level = await get_user_role_level(db, current_user.id)
     
     # Superusers can access any project
-    if current_user.company_id is None:
+    if current_user.is_superuser:
         return project
     
-    # Company users can only access projects from their company
-    if project.company_id != current_user.company_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only access projects from your company"
-        )
-    
-    # Technicians can only access projects they are assigned to
-    if role_level < 80:  # Below supervisor level
-        is_assigned = await project_service.check_technician_assigned_to_project(
-            project_id, current_user.id
-        )
-        if not is_assigned:
+    # Client users can only access projects from their company
+    if current_user.company_id is not None:
+        if project.company_id != current_user.company_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only access projects you are assigned to"
+                detail="You can only access projects from your company"
             )
+        return project
+    
+    # Employee users (company_id is null but not superuser)
+    # Managers and above can access any project
+    if role_level >= 90:
+        return project
+    
+    # Below manager level - employees can only access projects they are assigned to
+    is_assigned = await project_service.check_technician_assigned_to_project(
+        project_id, current_user.id
+    )
+    if not is_assigned:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only access projects you are assigned to"
+        )
     
     return project
 
@@ -118,12 +128,17 @@ async def update_project(
             detail="Only supervisors and higher can update projects"
         )
     
-    # Company users can only update projects from their own company
-    if current_user.company_id is not None and project.company_id != current_user.company_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only update projects from your company"
-        )
+    # Superusers can update any project
+    if current_user.is_superuser:
+        pass  # No restrictions
+    # Client users can only update projects from their company
+    elif current_user.company_id is not None:
+        if project.company_id != current_user.company_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only update projects from your company"
+            )
+    # Employee users - no additional company restrictions beyond role level
     
     updated_project = await project_service.update_project(project_id, project_in)
     if not updated_project:
@@ -159,12 +174,17 @@ async def delete_project(
             detail="Only supervisors and higher can delete projects"
         )
     
-    # Company users can only delete projects from their own company
-    if current_user.company_id is not None and project.company_id != current_user.company_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only delete projects from your company"
-        )
+    # Superusers can delete any project
+    if current_user.is_superuser:
+        pass  # No restrictions
+    # Client users can only delete projects from their company
+    elif current_user.company_id is not None:
+        if project.company_id != current_user.company_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only delete projects from your company"
+            )
+    # Employee users - no additional company restrictions beyond role level
     
     success = await project_service.delete_project(project_id)
     if not success:
@@ -180,24 +200,27 @@ async def list_projects(
     project_service: ProjectService = Depends(get_project_service),
     db: Pool = Depends(get_db)
 ):
-    """List projects based on user's company affiliation and role."""
+    """List projects based on user's role level and assignments."""
     role_level = await get_user_role_level(db, current_user.id)
     
     # Superusers can see all projects
-    if current_user.company_id is None:
+    if current_user.is_superuser:
         return await project_service.list_projects()
     
-    # Company users see only projects from their company
-    company_projects = await project_service.list_projects_by_company(current_user.company_id)
+    # Client users (with company_id) see only projects from their company
+    if current_user.company_id is not None:
+        company_projects = await project_service.list_projects_by_company(current_user.company_id)
+        return company_projects
     
-    # Technicians only see projects they are assigned to
-    if role_level < 80:  # Below supervisor level
-        technician_projects = await project_service.list_technician_projects(current_user.id)
-        # Filter company projects to only those the technician is assigned to
-        assigned_project_ids = {p['id'] for p in technician_projects}
-        return [p for p in company_projects if p.id in assigned_project_ids]
+    # Employee users (company_id is null but not superuser)
+    # Managers and above (level 90+) can see all projects
+    if role_level >= 90:
+        return await project_service.list_projects()
     
-    return company_projects
+    # Below manager level - employees only see projects they are assigned to
+    technician_projects = await project_service.list_technician_assigned_projects(current_user.id)
+    # Convert to ProjectResponse objects
+    return [ProjectResponse(**project) for project in technician_projects]
 
 
 # Address endpoints
@@ -303,12 +326,28 @@ async def create_project_visit(
             detail="Only technicians and higher can create project visits"
         )
     
-    # Company users can only create visits for projects from their company
-    if current_user.company_id is not None and project.company_id != current_user.company_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only create visits for projects from your company"
-        )
+    # Access control for project visits
+    if current_user.is_superuser:
+        pass  # Superusers can create visits for any project
+    elif current_user.company_id is not None:
+        # Client users can only create visits for projects from their company
+        if project.company_id != current_user.company_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only create visits for projects from your company"
+            )
+    else:
+        # Employee users - managers can create visits for any project
+        if role_level < 90:  # Below manager level
+            # Employees must be assigned to the project
+            is_assigned = await project_service.check_technician_assigned_to_project(
+                project_id, current_user.id
+            )
+            if not is_assigned:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You can only create visits for projects you are assigned to"
+                )
     
     return await project_service.create_project_visit(visit_in)
 
@@ -332,23 +371,28 @@ async def get_project_visits(
     
     role_level = await get_user_role_level(db, current_user.id)
     
-    # Company users can only access visits for projects from their company
-    if current_user.company_id is not None and project.company_id != current_user.company_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only access visits for projects from your company"
-        )
-    
-    # Technicians can only access visits for projects they are assigned to
-    if role_level < 80:  # Below supervisor level
-        is_assigned = await project_service.check_technician_assigned_to_project(
-            project_id, current_user.id
-        )
-        if not is_assigned:
+    # Access control for viewing project visits
+    if current_user.is_superuser:
+        pass  # Superusers can access visits for any project
+    elif current_user.company_id is not None:
+        # Client users can only access visits for projects from their company
+        if project.company_id != current_user.company_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only access visits for projects you are assigned to"
+                detail="You can only access visits for projects from your company"
             )
+    else:
+        # Employee users - managers can access visits for any project
+        if role_level < 90:  # Below manager level
+            # Employees must be assigned to the project
+            is_assigned = await project_service.check_technician_assigned_to_project(
+                project_id, current_user.id
+            )
+            if not is_assigned:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You can only access visits for projects you are assigned to"
+                )
     
     if visit_date:
         return await project_service.get_project_visits_by_date(project_id, visit_date)
@@ -374,23 +418,28 @@ async def get_project_addresses(
     
     role_level = await get_user_role_level(db, current_user.id)
     
-    # Company users can only access addresses for projects from their company
-    if current_user.company_id is not None and project.company_id != current_user.company_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only access addresses for projects from your company"
-        )
-    
-    # Technicians can only access addresses for projects they are assigned to
-    if role_level < 80:  # Below supervisor level
-        is_assigned = await project_service.check_technician_assigned_to_project(
-            project_id, current_user.id
-        )
-        if not is_assigned:
+    # Access control for viewing project addresses
+    if current_user.is_superuser:
+        pass  # Superusers can access addresses for any project
+    elif current_user.company_id is not None:
+        # Client users can only access addresses for projects from their company
+        if project.company_id != current_user.company_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only access addresses for projects you are assigned to"
+                detail="You can only access addresses for projects from your company"
             )
+    else:
+        # Employee users - supervisors and above can access addresses for any project
+        if role_level < 80:  # Below supervisor level
+            # Employees must be assigned to the project
+            is_assigned = await project_service.check_technician_assigned_to_project(
+                project_id, current_user.id
+            )
+            if not is_assigned:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You can only access addresses for projects you are assigned to"
+                )
     
     return await project_service.get_project_addresses(project_id)
 
@@ -413,24 +462,143 @@ async def get_project_technicians(
     
     role_level = await get_user_role_level(db, current_user.id)
     
-    # Company users can only access technicians for projects from their company
-    if current_user.company_id is not None and project.company_id != current_user.company_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only access technicians for projects from your company"
-        )
-    
-    # Technicians can only access technician lists for projects they are assigned to
-    if role_level < 80:  # Below supervisor level
-        is_assigned = await project_service.check_technician_assigned_to_project(
-            project_id, current_user.id
-        )
-        if not is_assigned:
+    # Access control for viewing project technicians
+    if current_user.is_superuser:
+        pass  # Superusers can access technicians for any project
+    elif current_user.company_id is not None:
+        # Client users can only access technicians for projects from their company
+        if project.company_id != current_user.company_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only access technician lists for projects you are assigned to"
+                detail="You can only access technicians for projects from your company"
             )
+    else:
+        # Employee users - supervisors and above can access technicians for any project
+        if role_level < 80:  # Below supervisor level
+            # Employees must be assigned to the project
+            is_assigned = await project_service.check_technician_assigned_to_project(
+                project_id, current_user.id
+            )
+            if not is_assigned:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You can only access technician lists for projects you are assigned to"
+                )
     
     return await project_service.get_project_technicians(project_id)
+
+
+@router.post("/{project_id}/technicians", status_code=status.HTTP_201_CREATED)
+async def assign_technician_to_project(
+    project_id: int,
+    technician_data: dict,
+    current_user: UserResponse = Depends(get_current_active_user),
+    project_service: ProjectService = Depends(get_project_service),
+    db: Pool = Depends(get_db)
+):
+    """Assign a technician to a project. Requires manager level or above."""
+    # Check if project exists and user has access
+    project = await project_service.get_project_by_id(project_id)
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+    
+    role_level = await get_user_role_level(db, current_user.id)
+    if role_level < 90:  # Manager level required
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only managers and higher can assign technicians"
+        )
+    
+    # Access control for assigning technicians
+    if current_user.is_superuser:
+        pass  # Superusers can assign technicians to any project
+    elif current_user.company_id is not None:
+        # Client users can only assign technicians to projects from their company
+        if project.company_id != current_user.company_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only assign technicians to projects from your company"
+            )
+    # Employee users - no additional company restrictions beyond role level
+    
+    technician_id = technician_data.get("user_id") or technician_data.get("technician_id")
+    if not technician_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing technician ID (use 'user_id' or 'technician_id')"
+        )
+    
+    # Verify the technician exists and has appropriate role level
+    async with db.acquire() as conn:
+        technician = await conn.fetchrow(
+            "SELECT id, highest_level FROM users WHERE id = $1",
+            technician_id
+        )
+        if not technician:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Technician not found"
+            )
+        if technician["highest_level"] < 50:  # Must be at least field tech level
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User must have technician level or higher to be assigned to projects"
+            )
+    
+    result = await project_service.assign_technician_to_project(
+        project_id, technician_id, current_user.id
+    )
+    
+    if result:
+        return {"message": "Technician assigned successfully", "assignment": result}
+    else:
+        return {"message": "Technician was already assigned to this project"}
+
+
+@router.delete("/{project_id}/technicians/{technician_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def unassign_technician_from_project(
+    project_id: int,
+    technician_id: int,
+    current_user: UserResponse = Depends(get_current_active_user),
+    project_service: ProjectService = Depends(get_project_service),
+    db: Pool = Depends(get_db)
+):
+    """Remove a technician's assignment from a project. Requires manager level or above."""
+    # Check if project exists and user has access
+    project = await project_service.get_project_by_id(project_id)
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+    
+    role_level = await get_user_role_level(db, current_user.id)
+    if role_level < 90:  # Manager level required
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only managers and higher can unassign technicians"
+        )
+    
+    # Access control for unassigning technicians
+    if current_user.is_superuser:
+        pass  # Superusers can unassign technicians from any project
+    elif current_user.company_id is not None:
+        # Client users can only unassign technicians from projects in their company
+        if project.company_id != current_user.company_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only unassign technicians from projects in your company"
+            )
+    # Employee users - no additional company restrictions beyond role level
+    
+    success = await project_service.unassign_technician_from_project(project_id, technician_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Technician assignment not found"
+        )
 
 
