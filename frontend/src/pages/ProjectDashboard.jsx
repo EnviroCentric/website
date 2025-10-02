@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { useRoles } from '../context/RolesContext';
 import api from '../services/api';
 import Modal from '../components/Modal';
+import AddressInput from '../components/AddressInput';
 import { formatDate } from '../utils/dateUtils';
 import { formatRoleName } from '../utils/roleUtils';
+import { useAuth } from '../context/AuthContext';
 
 export default function ProjectDashboard() {
   const [project, setProject] = useState(null);
@@ -17,13 +17,23 @@ export default function ProjectDashboard() {
   const [assignedTechnicians, setAssignedTechnicians] = useState([]);
   const [isSampleModalOpen, setIsSampleModalOpen] = useState(false);
   const [todayAddresses, setTodayAddresses] = useState([]);
-  const [newAddressName, setNewAddressName] = useState("");
+  const [newAddressData, setNewAddressData] = useState({
+    name: '',
+    address_line1: '',
+    address_line2: '',
+    city: '',
+    state: '',
+    zip: '',
+    formatted_address: '',
+    google_place_id: '',
+    latitude: null,
+    longitude: null
+  });
   const [addressLoading, setAddressLoading] = useState(false);
   const [addressError, setAddressError] = useState(null);
   const [technicianSearchTerm, setTechnicianSearchTerm] = useState('');
   const { projectId } = useParams();
   const { user } = useAuth();
-  const { roles } = useRoles();
   const navigate = useNavigate();
 
   // Get the highest role level from user's roles
@@ -194,10 +204,21 @@ export default function ProjectDashboard() {
     setAddressError(null);
     try {
       const response = await api.post(`/api/v1/projects/${projectId}/addresses`, {
-        name: newAddressName,
+        ...newAddressData,
         date: today,
       });
-      setNewAddressName("");
+      setNewAddressData({
+        name: '',
+        address_line1: '',
+        address_line2: '',
+        city: '',
+        state: '',
+        zip: '',
+        formatted_address: '',
+        google_place_id: '',
+        latitude: null,
+        longitude: null
+      });
       setIsSampleModalOpen(false);
       navigate(`/projects/${projectId}/addresses/${response.data.id}/collect-samples`);
     } catch (err) {
@@ -484,22 +505,32 @@ export default function ProjectDashboard() {
             )}
           </div>
           <form onSubmit={handleAddAddress} className="pt-4 border-t border-gray-200 dark:border-gray-700">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Add New Address for Today</label>
-            <input
-              type="text"
-              value={newAddressName}
-              onChange={e => setNewAddressName(e.target.value)}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white px-4 py-2 mb-2"
-              placeholder="Enter address name"
-              required
-            />
-            <button
-              type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            <h4 className="text-md font-medium text-gray-700 dark:text-gray-300 mb-4">Add New Address for Today</h4>
+            
+            <AddressInput
+              value={newAddressData}
+              onChange={setNewAddressData}
+              required={true}
               disabled={addressLoading}
-            >
-              Add Address & Collect Samples
-            </button>
+              className="mb-4"
+            />
+            
+            <div className="flex justify-end space-x-3 pt-4">
+              <button
+                type="button"
+                onClick={() => setIsSampleModalOpen(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                disabled={addressLoading || (!newAddressData.address_line1 && !newAddressData.formatted_address)}
+              >
+                {addressLoading ? 'Adding...' : 'Add Address & Collect Samples'}
+              </button>
+            </div>
           </form>
         </div>
       </Modal>

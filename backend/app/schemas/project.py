@@ -11,6 +11,11 @@ class AddressCreate(BaseModel):
     state: Optional[str] = None
     zip: Optional[str] = None
     notes: Optional[str] = None
+    # Google Places integration fields
+    formatted_address: Optional[str] = None
+    google_place_id: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 class AddressUpdate(BaseModel):
     name: Optional[str] = None
@@ -20,6 +25,11 @@ class AddressUpdate(BaseModel):
     state: Optional[str] = None
     zip: Optional[str] = None
     notes: Optional[str] = None
+    # Google Places integration fields
+    formatted_address: Optional[str] = None
+    google_place_id: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 class AddressResponse(BaseModel):
     id: int
@@ -30,6 +40,11 @@ class AddressResponse(BaseModel):
     state: Optional[str] = None
     zip: Optional[str] = None
     notes: Optional[str] = None
+    # Google Places integration fields
+    formatted_address: Optional[str] = None
+    google_place_id: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     created_at: datetime
 
     class Config:

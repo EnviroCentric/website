@@ -10,6 +10,7 @@ services:
       - /app/node_modules
     environment:
       - VITE_API_URL=${VITE_API_URL}
+      - VITE_GOOGLE_PLACES_API_KEY=${GOOGLE_MAPS_API_KEY}
     depends_on:
       - backend
 
@@ -35,6 +36,7 @@ services:
       - ADMIN_CREATION_SECRET=${ADMIN_CREATION_SECRET}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
       - BACKEND_PORT=${BACKEND_PORT}
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
     depends_on:
       db:
         condition: service_healthy

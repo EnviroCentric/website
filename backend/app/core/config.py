@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     ALLOWED_ORIGINS: List[str] = Field(["*"], description="CORS allowed origins")
     BACKEND_PORT: int = Field(8000, description="Port to bind the backend server")
+    GOOGLE_MAPS_API_KEY: str = Field(..., description="Google Places API key for address autocomplete and validation")
 
     class Config:
         env_file = ".env"

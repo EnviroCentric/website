@@ -1,5 +1,6 @@
 from typing import List, Optional
 from datetime import date
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from asyncpg import Pool
 
@@ -12,6 +13,9 @@ from app.schemas.project import (
 )
 from app.services.projects import ProjectService
 from app.services.roles import get_user_role_level
+from app.services.google_places import get_google_places_service, GooglePlacesService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     tags=["Project Management"],
@@ -229,15 +233,29 @@ async def create_address(
     address_in: AddressCreate,
     current_user: UserResponse = Depends(get_current_active_user),
     project_service: ProjectService = Depends(get_project_service),
+    places_service: GooglePlacesService = Depends(get_google_places_service),
     db: Pool = Depends(get_db)
 ):
-    """Create a new address. Requires technician level or above."""
+    """Create a new address with Google Places validation. Requires technician level or above."""
     role_level = await get_user_role_level(db, current_user.id)
     if role_level < 50:  # Technician level required
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only technicians and higher can create addresses"
         )
+    
+    # Validate and enrich address data if Google Places data is available
+    try:
+        address_dict = address_in.dict()
+        if any([address_dict.get('address_line1'), address_dict.get('formatted_address')]):
+            validated_data = await places_service.validate_and_enrich_address(address_dict)
+            # Update the address_in with validated data
+            for key, value in validated_data.items():
+                if hasattr(address_in, key) and value is not None:
+                    setattr(address_in, key, value)
+    except Exception as e:
+        # Log the error but don't fail the creation
+        logger.warning(f"Address validation failed: {e}")
     
     return await project_service.create_address(address_in)
 
@@ -292,6 +310,70 @@ async def update_address(
         )
     
     return updated_address
+
+
+# Address validation endpoints
+@router.post("/addresses/validate", response_model=dict)
+async def validate_address(
+    address_data: dict,
+    current_user: UserResponse = Depends(get_current_active_user),
+    places_service: GooglePlacesService = Depends(get_google_places_service),
+    db: Pool = Depends(get_db)
+):
+    """Validate and enrich address data using Google Places API. Requires technician level or above."""
+    role_level = await get_user_role_level(db, current_user.id)
+    if role_level < 50:  # Technician level required
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only technicians and higher can validate addresses"
+        )
+    
+    try:
+        validated_data = await places_service.validate_and_enrich_address(address_data)
+        return {
+            "success": True,
+            "data": validated_data
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "data": address_data  # Return original data as fallback
+        }
+
+
+@router.post("/addresses/geocode", response_model=dict)
+async def geocode_address(
+    address_text: str,
+    current_user: UserResponse = Depends(get_current_active_user),
+    places_service: GooglePlacesService = Depends(get_google_places_service),
+    db: Pool = Depends(get_db)
+):
+    """Geocode an address text to coordinates. Requires technician level or above."""
+    role_level = await get_user_role_level(db, current_user.id)
+    if role_level < 50:  # Technician level required
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only technicians and higher can geocode addresses"
+        )
+    
+    try:
+        result = await places_service.geocode_address(address_text)
+        if result:
+            return {
+                "success": True,
+                "data": result
+            }
+        else:
+            return {
+                "success": False,
+                "error": "Address not found or could not be geocoded"
+            }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 
 # Project visit endpoints

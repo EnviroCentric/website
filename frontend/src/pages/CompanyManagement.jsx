@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import Modal from '../components/Modal';
+import AddressInput from '../components/AddressInput';
 
 const CompanyManagement = () => {
   const [companies, setCompanies] = useState([]);
@@ -17,7 +18,11 @@ const CompanyManagement = () => {
     address_line2: '',
     city: '',
     state: '',
-    zip: ''
+    zip: '',
+    formatted_address: '',
+    google_place_id: '',
+    latitude: null,
+    longitude: null
   });
   
   const { user } = useAuth();
@@ -56,6 +61,13 @@ const CompanyManagement = () => {
     }));
   };
 
+  const handleAddressChange = (addressData) => {
+    setCompanyData(prev => ({
+      ...prev,
+      ...addressData
+    }));
+  };
+
   const resetForm = () => {
     setCompanyData({
       name: '',
@@ -63,7 +75,11 @@ const CompanyManagement = () => {
       address_line2: '',
       city: '',
       state: '',
-      zip: ''
+      zip: '',
+      formatted_address: '',
+      google_place_id: '',
+      latitude: null,
+      longitude: null
     });
   };
 
@@ -103,7 +119,11 @@ const CompanyManagement = () => {
       address_line2: company.address_line2 || '',
       city: company.city || '',
       state: company.state || '',
-      zip: company.zip || ''
+      zip: company.zip || '',
+      formatted_address: company.formatted_address || '',
+      google_place_id: company.google_place_id || '',
+      latitude: company.latitude || null,
+      longitude: company.longitude || null
     });
     setIsEditModalOpen(true);
   };
@@ -216,77 +236,23 @@ const CompanyManagement = () => {
             />
           </div>
 
-          <div>
-            <label htmlFor="address_line1" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Address Line 1
-            </label>
-            <input
-              type="text"
-              id="address_line1"
-              name="address_line1"
-              value={companyData.address_line1}
-              onChange={handleInputChange}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white px-4 py-2"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="address_line2" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Address Line 2
-            </label>
-            <input
-              type="text"
-              id="address_line2"
-              name="address_line2"
-              value={companyData.address_line2}
-              onChange={handleInputChange}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white px-4 py-2"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="city" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                City
-              </label>
-              <input
-                type="text"
-                id="city"
-                name="city"
-                value={companyData.city}
-                onChange={handleInputChange}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white px-4 py-2"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="state" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                State
-              </label>
-              <input
-                type="text"
-                id="state"
-                name="state"
-                value={companyData.state}
-                onChange={handleInputChange}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white px-4 py-2"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label htmlFor="zip" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              ZIP Code
-            </label>
-            <input
-              type="text"
-              id="zip"
-              name="zip"
-              value={companyData.zip}
-              onChange={handleInputChange}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white px-4 py-2"
-            />
-          </div>
+          <AddressInput
+            value={{
+              name: '',
+              address_line1: companyData.address_line1,
+              address_line2: companyData.address_line2,
+              city: companyData.city,
+              state: companyData.state,
+              zip: companyData.zip,
+              formatted_address: companyData.formatted_address,
+              google_place_id: companyData.google_place_id,
+              latitude: companyData.latitude,
+              longitude: companyData.longitude
+            }}
+            onChange={handleAddressChange}
+            required={false}
+            showManualEntry={false}
+          />
 
           <div className="flex justify-end space-x-3 pt-4">
             <button
@@ -335,77 +301,23 @@ const CompanyManagement = () => {
             />
           </div>
 
-          <div>
-            <label htmlFor="edit-address_line1" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Address Line 1
-            </label>
-            <input
-              type="text"
-              id="edit-address_line1"
-              name="address_line1"
-              value={companyData.address_line1}
-              onChange={handleInputChange}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white px-4 py-2"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="edit-address_line2" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Address Line 2
-            </label>
-            <input
-              type="text"
-              id="edit-address_line2"
-              name="address_line2"
-              value={companyData.address_line2}
-              onChange={handleInputChange}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white px-4 py-2"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="edit-city" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                City
-              </label>
-              <input
-                type="text"
-                id="edit-city"
-                name="city"
-                value={companyData.city}
-                onChange={handleInputChange}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white px-4 py-2"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="edit-state" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                State
-              </label>
-              <input
-                type="text"
-                id="edit-state"
-                name="state"
-                value={companyData.state}
-                onChange={handleInputChange}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white px-4 py-2"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label htmlFor="edit-zip" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              ZIP Code
-            </label>
-            <input
-              type="text"
-              id="edit-zip"
-              name="zip"
-              value={companyData.zip}
-              onChange={handleInputChange}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white px-4 py-2"
-            />
-          </div>
+          <AddressInput
+            value={{
+              name: '',
+              address_line1: companyData.address_line1,
+              address_line2: companyData.address_line2,
+              city: companyData.city,
+              state: companyData.state,
+              zip: companyData.zip,
+              formatted_address: companyData.formatted_address,
+              google_place_id: companyData.google_place_id,
+              latitude: companyData.latitude,
+              longitude: companyData.longitude
+            }}
+            onChange={handleAddressChange}
+            required={false}
+            showManualEntry={false}
+          />
 
           <div className="flex justify-end space-x-3 pt-4">
             <button
