@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import Modal from '../components/Modal';
 import { formatDate } from '../utils/dateUtils';
+import { formatCompanyName } from '../utils/textUtils';
 
 const CompanyDetails = () => {
   const { companyId } = useParams();
@@ -234,7 +235,7 @@ const CompanyDetails = () => {
             </svg>
           </button>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            {company.name}
+            {formatCompanyName(company.name)}
           </h1>
         </div>
         <div className="flex space-x-3">
@@ -267,29 +268,35 @@ const CompanyDetails = () => {
 
       {/* Company Information */}
       <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 mb-8">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Company Information</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-500 dark:text-gray-400">Company Name</label>
-            <p className="text-gray-900 dark:text-white">{company.name}</p>
-          </div>
-          {company.address_line1 && (
-            <div>
-              <label className="block text-sm font-medium text-gray-500 dark:text-gray-400">Address</label>
-              <p className="text-gray-900 dark:text-white">
-                {[company.address_line1, company.address_line2, company.city, company.state, company.zip]
-                  .filter(Boolean)
-                  .join(', ')}
-              </p>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-6 text-center">Company Information</h2>
+        <div className="max-w-4xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="text-center">
+              <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Company Name</label>
+              <p className="text-lg font-semibold text-gray-900 dark:text-white">{formatCompanyName(company.name)}</p>
             </div>
-          )}
-          <div>
-            <label className="block text-sm font-medium text-gray-500 dark:text-gray-400">Created</label>
-            <p className="text-gray-900 dark:text-white">{formatDate(company.created_at)}</p>
+            <div className="text-center">
+              <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Created</label>
+              <p className="text-lg text-gray-900 dark:text-white">{formatDate(company.created_at)}</p>
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-500 dark:text-gray-400">Total Projects</label>
-            <p className="text-gray-900 dark:text-white">{companyProjects.length}</p>
+          {/* Company Address - Always show section, even if empty */}
+          <div className="mt-6 text-center">
+            <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Company Address</label>
+            {company.address_line1 ? (
+              <div className="text-gray-900 dark:text-white space-y-1 text-lg">
+                <div>{company.address_line1}</div>
+                {company.address_line2 && <div>{company.address_line2}</div>}
+                <div>
+                  {[company.city, company.state].filter(Boolean).join(', ')}
+                  {company.zip && ` ${company.zip}`}
+                </div>
+              </div>
+            ) : (
+              <div className="text-gray-500 dark:text-gray-400 italic text-lg">
+                No address information available
+              </div>
+            )}
           </div>
         </div>
       </div>

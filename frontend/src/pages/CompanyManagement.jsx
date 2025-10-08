@@ -4,14 +4,13 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import Modal from '../components/Modal';
 import AddressInput from '../components/AddressInput';
+import { formatCompanyName } from '../utils/textUtils';
 
 const CompanyManagement = () => {
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editingCompany, setEditingCompany] = useState(null);
   const [companyData, setCompanyData] = useState({
     name: '',
     address_line1: '',
@@ -62,9 +61,12 @@ const CompanyManagement = () => {
   };
 
   const handleAddressChange = (addressData) => {
+    // Filter out 'name' field to prevent overwriting company name with place name
+    const { name, ...addressFields } = addressData;
+    
     setCompanyData(prev => ({
       ...prev,
-      ...addressData
+      ...addressFields
     }));
   };
 
@@ -96,37 +98,6 @@ const CompanyManagement = () => {
     }
   };
 
-  const handleEditCompany = async (e) => {
-    e.preventDefault();
-    try {
-      const response = await api.put(`/api/v1/companies/${editingCompany.id}`, companyData);
-      await fetchCompanies();
-      setIsEditModalOpen(false);
-      setEditingCompany(null);
-      resetForm();
-    } catch (err) {
-      setError('Failed to update company');
-      console.error('Error updating company:', err);
-    }
-  };
-
-
-  const openEditModal = (company) => {
-    setEditingCompany(company);
-    setCompanyData({
-      name: company.name,
-      address_line1: company.address_line1 || '',
-      address_line2: company.address_line2 || '',
-      city: company.city || '',
-      state: company.state || '',
-      zip: company.zip || '',
-      formatted_address: company.formatted_address || '',
-      google_place_id: company.google_place_id || '',
-      latitude: company.latitude || null,
-      longitude: company.longitude || null
-    });
-    setIsEditModalOpen(true);
-  };
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString();
@@ -175,25 +146,9 @@ const CompanyManagement = () => {
               className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 cursor-pointer hover:shadow-lg transition-shadow duration-200 relative"
               onClick={() => navigate(`/companies/${company.id}`)}
             >
-              {/* Action buttons - positioned absolutely to avoid triggering parent click */}
-              <div className="absolute top-4 right-4 flex space-x-2">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation(); // Prevent triggering parent click
-                    openEditModal(company);
-                  }}
-                  className="p-2 bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-400 rounded-full hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors"
-                  title="Edit Company"
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="pr-16"> {/* Add padding-right to avoid overlap with action buttons */}
+              <div>
                 <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                  {company.name}
+                  {formatCompanyName(company.name)}
                 </h3>
                 {(company.address_line1 || company.city || company.state) && (
                   <p className="text-gray-600 dark:text-gray-400 text-sm mb-2">
@@ -252,6 +207,7 @@ const CompanyManagement = () => {
             onChange={handleAddressChange}
             required={false}
             showManualEntry={false}
+            showLocationName={false}
           />
 
           <div className="flex justify-end space-x-3 pt-4">
@@ -275,71 +231,6 @@ const CompanyManagement = () => {
         </form>
       </Modal>
 
-      {/* Edit Company Modal */}
-      <Modal
-        isOpen={isEditModalOpen}
-        onClose={() => {
-          setIsEditModalOpen(false);
-          setEditingCompany(null);
-          resetForm();
-        }}
-        title="Edit Company"
-      >
-        <form onSubmit={handleEditCompany} className="space-y-4">
-          <div>
-            <label htmlFor="edit-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Company Name *
-            </label>
-            <input
-              type="text"
-              id="edit-name"
-              name="name"
-              value={companyData.name}
-              onChange={handleInputChange}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white px-4 py-2"
-              required
-            />
-          </div>
-
-          <AddressInput
-            value={{
-              name: '',
-              address_line1: companyData.address_line1,
-              address_line2: companyData.address_line2,
-              city: companyData.city,
-              state: companyData.state,
-              zip: companyData.zip,
-              formatted_address: companyData.formatted_address,
-              google_place_id: companyData.google_place_id,
-              latitude: companyData.latitude,
-              longitude: companyData.longitude
-            }}
-            onChange={handleAddressChange}
-            required={false}
-            showManualEntry={false}
-          />
-
-          <div className="flex justify-end space-x-3 pt-4">
-            <button
-              type="button"
-              onClick={() => {
-                setIsEditModalOpen(false);
-                setEditingCompany(null);
-                resetForm();
-              }}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
-              Update Company
-            </button>
-          </div>
-        </form>
-      </Modal>
     </div>
   );
 };

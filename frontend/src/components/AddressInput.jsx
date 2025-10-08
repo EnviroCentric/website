@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import GooglePlacesAutocomplete, { GoogleMapsLoader } from './GooglePlacesAutocomplete';
+import SimpleGooglePlaces from './SimpleGooglePlaces';
+import { GoogleMapsLoader } from './GooglePlacesAutocomplete';
 
 /**
  * Enhanced Address Input component with Google Places integration
@@ -11,7 +12,8 @@ const AddressInput = ({
   required = false, 
   disabled = false,
   showManualEntry = false,
-  className = ""
+  className = "",
+  showLocationName = true // New prop to control location name visibility
 }) => {
   const [useGooglePlaces, setUseGooglePlaces] = useState(true);
   const [manualMode, setManualMode] = useState(showManualEntry);
@@ -34,9 +36,16 @@ const AddressInput = ({
 
   useEffect(() => {
     if (onChange) {
-      onChange(addressData);
+      // Filter out 'name' field when showLocationName is false to prevent 
+      // overwriting company/project names with location names
+      if (!showLocationName) {
+        const { name, ...addressFieldsOnly } = addressData;
+        onChange(addressFieldsOnly);
+      } else {
+        onChange(addressData);
+      }
     }
-  }, [addressData]);
+  }, [addressData, showLocationName, onChange]);
 
   const handlePlaceSelect = (placeData) => {
     setAddressData(prev => ({
@@ -83,20 +92,22 @@ const AddressInput = ({
           )}
         </div>
         
-        {/* Name/Alias */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Location Name/Alias
-          </label>
-          <input
-            type="text"
-            value={addressData.name || ''}
-            onChange={(e) => handleManualChange('name', e.target.value)}
-            className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2"
-            placeholder="e.g., Warehouse A, Building 1"
-            disabled={disabled}
-          />
-        </div>
+        {/* Name/Alias - only show if showLocationName is true */}
+        {showLocationName && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Location Name/Alias
+            </label>
+            <input
+              type="text"
+              value={addressData.name || ''}
+              onChange={(e) => handleManualChange('name', e.target.value)}
+              className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2"
+              placeholder="e.g., Warehouse A, Building 1"
+              disabled={disabled}
+            />
+          </div>
+        )}
 
         {/* Address Line 1 */}
         <div>
@@ -196,50 +207,46 @@ const AddressInput = ({
           </button>
         </div>
         
-        {/* Name/Alias */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Location Name/Alias (optional)
-          </label>
-          <input
-            type="text"
-            value={addressData.name || ''}
-            onChange={(e) => handleManualChange('name', e.target.value)}
-            className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 mb-4"
-            placeholder="e.g., Warehouse A, Building 1"
-            disabled={disabled}
-          />
-        </div>
+        {/* Name/Alias - only show if showLocationName is true */}
+        {showLocationName && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Location Name/Alias (optional)
+            </label>
+            <input
+              type="text"
+              value={addressData.name || ''}
+              onChange={(e) => handleManualChange('name', e.target.value)}
+              className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 mb-4"
+              placeholder="e.g., Warehouse A, Building 1"
+              disabled={disabled}
+            />
+          </div>
+        )}
 
         {/* Google Places Autocomplete */}
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Street Address
           </label>
-          <GooglePlacesAutocomplete
+          <SimpleGooglePlaces
             value={addressData.formatted_address || addressData.address_line1}
             onPlaceSelect={handlePlaceSelect}
+            onChange={(value) => {
+              // Allow manual typing to update address_line1 as fallback
+              setAddressData(prev => ({
+                ...prev,
+                address_line1: value,
+                formatted_address: '' // Clear this to indicate manual entry
+              }));
+            }}
             placeholder="Start typing an address..."
             className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2"
             required={required}
             disabled={disabled}
-            type="address"
           />
         </div>
 
-        {/* Show selected address details */}
-        {addressData.formatted_address && (
-          <div className="mt-2 p-3 bg-green-50 dark:bg-green-900/20 rounded-md">
-            <p className="text-sm text-green-800 dark:text-green-200">
-              <strong>Selected:</strong> {addressData.formatted_address}
-            </p>
-            {addressData.latitude && addressData.longitude && (
-              <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                Coordinates: {addressData.latitude.toFixed(6)}, {addressData.longitude.toFixed(6)}
-              </p>
-            )}
-          </div>
-        )}
       </div>
     </GoogleMapsLoader>
   );

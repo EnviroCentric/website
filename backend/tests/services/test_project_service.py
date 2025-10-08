@@ -1,6 +1,6 @@
 import pytest
 from datetime import date
-from app.schemas.project import ProjectCreate, ProjectUpdate, AddressCreate, AddressUpdate, ProjectVisitCreate
+from app.schemas.project import ProjectCreate, ProjectUpdate, ProjectVisitCreate
 from app.services.projects import ProjectService
 
 @pytest.mark.asyncio
@@ -50,43 +50,32 @@ async def test_update_project_success(db_pool):
     assert updated.name == "Updated Project"
     assert updated.id == project.id
 
-@pytest.mark.asyncio
-async def test_create_address_success(db_pool):
-    """Test creating an address with valid data."""
-    service = ProjectService(db_pool)
-    
-    # Create address
-    address_data = AddressCreate(name="123 Test St", address_line1="123 Test Street", city="Test City")
-    address = await service.create_address(address_data)
-    assert address["name"] == "123 Test St"
-    assert address["address_line1"] == "123 Test Street"
-    assert "id" in address
+# Address creation is now handled through project visits
 
 @pytest.mark.asyncio
 async def test_create_project_visit_success(db_pool, technician_user):
-    """Test creating a project visit with valid data."""
+    """Test creating a project visit with embedded address data."""
     service = ProjectService(db_pool)
     
     # Create a project first
     project_data = ProjectCreate(name="Test Project", company_id=1)
     project = await service.create_project(project_data)
     
-    # Create an address
-    address_data = AddressCreate(name="123 Test St", address_line1="123 Test Street")
-    address = await service.create_address(address_data)
-    
-    # Create project visit
+    # Create project visit with embedded address data
     visit_data = ProjectVisitCreate(
         project_id=project.id,
-        address_id=address["id"],
         visit_date=date.today(),
         technician_id=technician_user.id,
-        notes="Test visit"
+        notes="Test visit",
+        description="123 Test St",
+        address_line1="123 Test Street",
+        city="Test City"
     )
     visit = await service.create_project_visit(visit_data)
     assert visit["project_id"] == project.id
-    assert visit["address_id"] == address["id"]
     assert visit["technician_id"] == technician_user.id
+    assert visit["address_line1"] == "123 Test Street"
+    assert visit["description"] == "123 Test St"
 
 @pytest.mark.asyncio 
 async def test_check_technician_assigned_to_project(db_pool, technician_user):
@@ -101,15 +90,13 @@ async def test_check_technician_assigned_to_project(db_pool, technician_user):
     is_assigned = await service.check_technician_assigned_to_project(project.id, technician_user.id)
     assert not is_assigned
     
-    # Create an address and visit to assign technician
-    address_data = AddressCreate(name="123 Test St")
-    address = await service.create_address(address_data)
-    
+    # Create a visit to assign technician (with embedded address)
     visit_data = ProjectVisitCreate(
         project_id=project.id,
-        address_id=address["id"],
         visit_date=date.today(),
-        technician_id=technician_user.id
+        technician_id=technician_user.id,
+        description="123 Test St",
+        address_line1="123 Test Street"
     )
     await service.create_project_visit(visit_data)
     

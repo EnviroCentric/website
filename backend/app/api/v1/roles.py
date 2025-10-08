@@ -139,17 +139,74 @@ async def assign_user_role(
                    ON CONFLICT (user_id, role_id) DO NOTHING""",
                 assignment.user_id, assignment.role_id
             )
-            # Update user's highest_level field
-            role_level = await conn.fetchval("SELECT level FROM roles WHERE id = $1", assignment.role_id)
-            current_highest = await conn.fetchval("SELECT highest_level FROM users WHERE id = $1", assignment.user_id)
-            if role_level and (not current_highest or role_level > current_highest):
-                await conn.execute(
-                    "UPDATE users SET highest_level = $1 WHERE id = $2",
-                    role_level, assignment.user_id
-                )
+            # Update user's highest_level field by recalculating from all their roles
+            max_level = await conn.fetchval(
+                """SELECT COALESCE(MAX(r.level), 0) 
+                   FROM user_roles ur 
+                   JOIN roles r ON ur.role_id = r.id 
+                   WHERE ur.user_id = $1""",
+                assignment.user_id
+            )
+            await conn.execute(
+                "UPDATE users SET highest_level = $1 WHERE id = $2",
+                max_level, assignment.user_id
+            )
             return {"message": "Role assigned successfully"}
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Failed to assign role"
+            )
+
+@router.post("/unassign", status_code=status.HTTP_200_OK)
+async def unassign_user_role(
+    assignment: RoleAssignmentRequest,
+    current_user: dict = Depends(get_current_user),
+    db: asyncpg.Pool = Depends(get_db)
+):
+    """Remove a role from a user."""
+    # Check role permissions using level-based system
+    current_user_model = UserResponse(**current_user)
+    role_level = await get_user_role_level(db, current_user_model.id)
+    if not current_user_model.is_superuser and role_level < 100:  # Admin level required
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions to unassign roles"
+        )
+    
+    # Remove role assignment from database
+    async with db.acquire() as conn:
+        try:
+            result = await conn.execute(
+                "DELETE FROM user_roles WHERE user_id = $1 AND role_id = $2",
+                assignment.user_id, assignment.role_id
+            )
+            
+            # Check if any rows were deleted
+            if result == "DELETE 0":
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Role assignment not found"
+                )
+            
+            # Recalculate user's highest_level field after removing the role
+            max_level = await conn.fetchval(
+                """SELECT COALESCE(MAX(r.level), 0) 
+                   FROM user_roles ur 
+                   JOIN roles r ON ur.role_id = r.id 
+                   WHERE ur.user_id = $1""",
+                assignment.user_id
+            )
+            await conn.execute(
+                "UPDATE users SET highest_level = $1 WHERE id = $2",
+                max_level, assignment.user_id
+            )
+            
+            return {"message": "Role unassigned successfully"}
+        except HTTPException:
+            raise  # Re-raise HTTP exceptions
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to unassign role"
             )

@@ -8,11 +8,21 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+      - ./frontend/certs:/app/certs:ro
     environment:
       - VITE_API_URL=${VITE_API_URL}
+      - VITE_FRONTEND_URL=${VITE_FRONTEND_URL}
+      - VITE_MOBILE_URL=${VITE_MOBILE_URL}
+      - VITE_PROTOCOL=${VITE_PROTOCOL}
+      - VITE_HOST=${VITE_HOST}
+      - VITE_MOBILE_HOST=${VITE_MOBILE_HOST}
+      - VITE_PORT=${VITE_PORT}
       - VITE_GOOGLE_PLACES_API_KEY=${GOOGLE_MAPS_API_KEY}
     depends_on:
       - backend
+    # Enable access from mobile devices on local network
+    networks:
+      - default
 
   backend:
     build:
@@ -22,6 +32,7 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      - ./backend/certs:/app/certs:ro
     environment:
       - PYTHONPATH=/app
       - POSTGRES_USER=${POSTGRES_USER}

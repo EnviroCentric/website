@@ -20,6 +20,8 @@ import ServiceInfo from './pages/ServiceInfo';
 import CompanyManagement from './pages/CompanyManagement';
 import CompanyDetails from './pages/CompanyDetails';
 import CompanyDashboard from './pages/CompanyDashboard';
+import CameraTest from './components/CameraTest';
+import MobileCameraTest from './components/MobileCameraTest';
 
 import { RolesProvider } from './context/RolesContext';
 import { PermissionsProvider } from './context/PermissionsContext';
@@ -66,6 +68,14 @@ function App() {
                   
                   {/* Sample Collection - Requires Technician level (50) or higher */}
                   <Route
+                    path="/projects/:projectId/collect-samples"
+                    element={
+                      <RequireTechnician showForbidden={true}>
+                        <SampleCollection />
+                      </RequireTechnician>
+                    }
+                  />
+                  <Route
                     path="/projects/:projectId/addresses/:addressId/collect-samples"
                     element={
                       <RequireTechnician showForbidden={true}>
@@ -103,6 +113,10 @@ function App() {
                   {/* Public routes */}
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />
+                  
+                  {/* Debug routes */}
+                  <Route path="/camera-test" element={<CameraTest />} />
+                  <Route path="/mobile-camera-test" element={<MobileCameraTest />} />
                   
                   {/* User Management - Requires Supervisor level (80) or higher */}
                   <Route

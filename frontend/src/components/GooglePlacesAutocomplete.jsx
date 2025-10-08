@@ -1,13 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 /**
- * Google Places Autocomplete component using Google Maps Extended Component Library
- * This component provides address autocomplete functionality without requiring a map
- * 
- * Note: This uses the modern <gmpx-place-picker> component which uses the new 
- * google.maps.places.PlaceAutocompleteElement under the hood, avoiding the 
- * deprecated google.maps.places.Autocomplete API. Any deprecation warnings 
- * in the console are informational and do not affect this implementation.
+ * Simple Google Places Autocomplete component
+ * Uses a direct implementation to avoid API conflicts
  */
 const GooglePlacesAutocomplete = ({ 
   value, 
@@ -17,59 +12,85 @@ const GooglePlacesAutocomplete = ({
   className = "",
   required = false,
   disabled = false,
-  type = "address" // Can be: "address", "establishment", "geocode", "(cities)", "(regions)"
+  type = "address"
 }) => {
-  const placePickerRef = useRef(null);
+  const inputRef = useRef(null);
+  const autocompleteRef = useRef(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState(null);
+  const [inputValue, setInputValue] = useState(value || '');
 
   useEffect(() => {
-    // Check if Google Maps Extended Component Library is loaded
-    const checkLibraryLoaded = () => {
-      if (window.customElements && window.customElements.get('gmpx-place-picker')) {
+    setInputValue(value || '');
+  }, [value]);
+
+  useEffect(() => {
+    // Check if Google Maps API is loaded
+    const checkGoogleMapsLoaded = () => {
+      console.log('DEBUG: Checking Google Maps API...', {
+        google: !!window.google,
+        maps: !!(window.google && window.google.maps),
+        places: !!(window.google && window.google.maps && window.google.maps.places)
+      });
+      
+      if (window.google && window.google.maps && window.google.maps.places) {
+        console.log('DEBUG: Google Maps API loaded successfully');
         setIsLoaded(true);
-        setupPlacePicker();
+        initializeAutocomplete();
       } else {
-        setTimeout(checkLibraryLoaded, 100);
+        setTimeout(checkGoogleMapsLoaded, 100);
       }
     };
 
-    checkLibraryLoaded();
+    checkGoogleMapsLoaded();
   }, []);
 
-  const setupPlacePicker = () => {
-    const placePicker = placePickerRef.current;
-    if (!placePicker) return;
+  const initializeAutocomplete = () => {
+    console.log('DEBUG: initializeAutocomplete called', {
+      inputRef: !!inputRef.current,
+      autocompleteRef: !!autocompleteRef.current,
+      type: type
+    });
+    
+    if (!inputRef.current || autocompleteRef.current) {
+      console.log('DEBUG: Skipping autocomplete init - missing input or already initialized');
+      return;
+    }
 
-    // Set the type filter for the place picker
-    placePicker.type = type;
+    try {
+      console.log('DEBUG: Creating Google Places Autocomplete...');
+      // Initialize the autocomplete
+      const autocomplete = new window.google.maps.places.Autocomplete(inputRef.current, {
+        types: [type],
+        fields: ['place_id', 'formatted_address', 'address_components', 'geometry']
+      });
 
-    // Listen for place selection changes
-    placePicker.addEventListener('gmpx-placechange', handlePlaceChange);
+      console.log('DEBUG: Autocomplete created successfully');
+      autocompleteRef.current = autocomplete;
 
-    return () => {
-      if (placePicker) {
-        placePicker.removeEventListener('gmpx-placechange', handlePlaceChange);
-      }
-    };
+      // Listen for place selection
+      autocomplete.addListener('place_changed', handlePlaceChanged);
+      console.log('DEBUG: place_changed listener added');
+    } catch (error) {
+      console.error('DEBUG: Error creating autocomplete:', error);
+      setError('Failed to initialize Google Places autocomplete');
+    }
   };
 
-  const handlePlaceChange = (event) => {
-    const place = event.target.value;
+  const handlePlaceChanged = () => {
+    const place = autocompleteRef.current.getPlace();
     
-    if (!place || !place.location) {
+    if (!place || !place.geometry) {
       setError("No location details available for this address");
       return;
     }
 
     const addressData = {
-      place_id: place.id,
-      formatted_address: place.formattedAddress,
-      display_name: place.displayName,
-      latitude: place.location.lat,
-      longitude: place.location.lng,
-      // Extract address components if available
-      address_components: place.addressComponents || []
+      place_id: place.place_id,
+      formatted_address: place.formatted_address,
+      latitude: place.geometry.location.lat(),
+      longitude: place.geometry.location.lng(),
+      address_components: place.address_components || []
     };
 
     // Extract structured address parts
@@ -81,6 +102,8 @@ const GooglePlacesAutocomplete = ({
     };
 
     setError(null);
+    setInputValue(place.formatted_address);
+    
     if (onPlaceSelect) {
       onPlaceSelect(enrichedData);
     }
@@ -98,65 +121,55 @@ const GooglePlacesAutocomplete = ({
 
     if (!components || !Array.isArray(components)) return parts;
 
+    let streetNumber = '';
+    let route = '';
+
     components.forEach(component => {
       const types = component.types || [];
       
       if (types.includes('street_number')) {
-        parts.street_number = component.longText;
+        streetNumber = component.long_name;
       } else if (types.includes('route')) {
-        parts.route = component.longText;
+        route = component.long_name;
       } else if (types.includes('subpremise')) {
-        parts.address_line2 = `Apt ${component.longText}`;
+        parts.address_line2 = `Apt ${component.long_name}`;
       } else if (types.includes('locality')) {
-        parts.city = component.longText;
+        parts.city = component.long_name;
       } else if (types.includes('administrative_area_level_1')) {
-        parts.state = component.shortText;
+        parts.state = component.short_name;
       } else if (types.includes('postal_code')) {
-        parts.zip = component.longText;
+        parts.zip = component.long_name;
       } else if (types.includes('country')) {
-        parts.country = component.longText;
+        parts.country = component.long_name;
       }
     });
 
     // Build address line 1 from street number and route
-    parts.address_line1 = `${parts.street_number || ''} ${parts.route || ''}`.trim();
+    parts.address_line1 = `${streetNumber} ${route}`.trim();
 
     return parts;
   };
 
   const handleInputChange = (event) => {
-    const inputValue = event.target.value;
+    const newValue = event.target.value;
+    setInputValue(newValue);
+    
     if (onChange) {
-      onChange(inputValue);
+      onChange(newValue);
     }
   };
 
-  if (!isLoaded) {
-    return (
-      <input
-        type="text"
-        value={value || ''}
-        onChange={handleInputChange}
-        placeholder="Loading Google Places..."
-        className={`${className} animate-pulse`}
-        disabled={true}
-      />
-    );
-  }
-
   return (
     <div className="relative">
-      <gmpx-place-picker
-        ref={placePickerRef}
-        type={type}
-        placeholder={placeholder}
-        disabled={disabled}
-        className={`w-full ${className}`}
-        style={{
-          '--gmpx-color-primary': '#3B82F6',
-          '--gmpx-color-on-surface': '#374151',
-          '--gmpx-font-family': 'inherit'
-        }}
+      <input
+        ref={inputRef}
+        type="text"
+        value={inputValue}
+        onChange={handleInputChange}
+        placeholder={isLoaded ? placeholder : "Loading Google Places..."}
+        className={className}
+        required={required}
+        disabled={disabled || !isLoaded}
       />
       {error && (
         <div className="mt-1 text-sm text-red-600 dark:text-red-400">
@@ -169,53 +182,66 @@ const GooglePlacesAutocomplete = ({
 
 /**
  * Google Maps API Loader component
- * This component loads the Google Maps Extended Component Library
+ * This component loads the standard Google Maps JavaScript API
  */
 export const GoogleMapsLoader = ({ apiKey, children }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState(null);
-  const loaderRef = useRef(null);
 
   useEffect(() => {
-    // Check if the library is already loaded
-    if (window.customElements && window.customElements.get('gmpx-api-loader')) {
+    // Check if Google Maps API is already loaded
+    if (window.google && window.google.maps && window.google.maps.places) {
       setIsLoaded(true);
       return;
     }
 
-    // Load the Extended Component Library (latest version)
+    if (!apiKey) {
+      setError('Google Maps API key is required');
+      return;
+    }
+
+    // Check if script is already loading/loaded
+    const existingScript = document.querySelector(`script[src*="maps.googleapis.com/maps/api/js"]`);
+    if (existingScript) {
+      // Script already exists, wait for it to load
+      const checkLoaded = setInterval(() => {
+        if (window.google && window.google.maps && window.google.maps.places) {
+          setIsLoaded(true);
+          clearInterval(checkLoaded);
+        }
+      }, 100);
+      
+      return () => clearInterval(checkLoaded);
+    }
+
+    // Load the Google Maps JavaScript API
     const script = document.createElement('script');
-    script.type = 'module';
-    script.src = 'https://unpkg.com/@googlemaps/extended-component-library@^0.6';
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&loading=async`;
+    script.async = true;
+    script.defer = true;
     
     script.onload = () => {
-      setIsLoaded(true);
-      setError(null);
+      // Wait a bit for the API to fully initialize
+      setTimeout(() => {
+        if (window.google && window.google.maps && window.google.maps.places) {
+          setIsLoaded(true);
+          setError(null);
+        } else {
+          setError('Google Maps API failed to initialize properly');
+        }
+      }, 200);
     };
 
     script.onerror = () => {
-      setError('Failed to load Google Maps Extended Component Library');
+      setError('Failed to load Google Maps API');
     };
 
     document.head.appendChild(script);
 
     return () => {
-      // Cleanup script if component unmounts
-      if (document.head.contains(script)) {
-        document.head.removeChild(script);
-      }
+      // Don't remove script on unmount to avoid issues with other components
     };
-  }, []);
-
-  useEffect(() => {
-    // Set the API key on the web component after it's loaded
-    if (isLoaded && loaderRef.current && apiKey) {
-      loaderRef.current.setAttribute('key', apiKey);
-      
-      // Suppress deprecation warnings by setting solution channel
-      loaderRef.current.setAttribute('solution-channel', 'GMP_CCS_autocomplete_v6');
-    }
-  }, [isLoaded, apiKey]);
+  }, [apiKey]);
 
   if (error) {
     return (
@@ -224,7 +250,7 @@ export const GoogleMapsLoader = ({ apiKey, children }) => {
           {error}
         </p>
         <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-          Please check your internet connection and try again.
+          Please check your API key and internet connection.
         </p>
       </div>
     );
@@ -234,20 +260,12 @@ export const GoogleMapsLoader = ({ apiKey, children }) => {
     return (
       <div className="flex items-center justify-center p-4">
         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
-        <span className="ml-2 text-gray-600 dark:text-gray-400">Loading Google Places...</span>
+        <span className="ml-2 text-gray-600 dark:text-gray-400">Loading Google Maps...</span>
       </div>
     );
   }
 
-  return (
-    <>
-      <gmpx-api-loader
-        ref={loaderRef}
-        solution-channel="GMP_CCS_autocomplete_v6"
-      />
-      {children}
-    </>
-  );
+  return children;
 };
 
 export default GooglePlacesAutocomplete;

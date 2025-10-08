@@ -2,53 +2,7 @@ from datetime import date, datetime
 from typing import List, Optional
 from pydantic import BaseModel, Field, field_validator
 
-# Address schemas for new workflow structure
-class AddressCreate(BaseModel):
-    name: Optional[str] = None
-    address_line1: Optional[str] = None
-    address_line2: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    zip: Optional[str] = None
-    notes: Optional[str] = None
-    # Google Places integration fields
-    formatted_address: Optional[str] = None
-    google_place_id: Optional[str] = None
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
-
-class AddressUpdate(BaseModel):
-    name: Optional[str] = None
-    address_line1: Optional[str] = None
-    address_line2: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    zip: Optional[str] = None
-    notes: Optional[str] = None
-    # Google Places integration fields
-    formatted_address: Optional[str] = None
-    google_place_id: Optional[str] = None
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
-
-class AddressResponse(BaseModel):
-    id: int
-    name: Optional[str] = None
-    address_line1: Optional[str] = None
-    address_line2: Optional[str] = None
-    city: Optional[str] = None
-    state: Optional[str] = None
-    zip: Optional[str] = None
-    notes: Optional[str] = None
-    # Google Places integration fields
-    formatted_address: Optional[str] = None
-    google_place_id: Optional[str] = None
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
+# Address schemas are now removed - address data is embedded in ProjectVisit schemas
 
 # Project schemas for new workflow structure
 class ProjectCreate(BaseModel):
@@ -88,30 +42,99 @@ class ProjectResponse(BaseModel):
     class Config:
         from_attributes = True
 
-# Project visit schemas
+# Project visit schemas (now includes embedded address data)
 class ProjectVisitCreate(BaseModel):
     project_id: int
-    address_id: int
     visit_date: date
     technician_id: int
     notes: Optional[str] = None
+    description: Optional[str] = None  # Location-specific name (e.g., "Warehouse A")
+    
+    # Traditional address fields (legacy/manual entry)
+    address_line1: Optional[str] = None
+    address_line2: Optional[str] = None
+    city: Optional[str] = None  # Legacy field, prefer locality
+    state: Optional[str] = None  # Legacy field, prefer administrative_area_level_1
+    zip: Optional[str] = None  # Legacy field, prefer postal_code
+    
+    # Google Places integration fields
+    formatted_address: Optional[str] = None
+    google_place_id: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    place_types: Optional[List[str]] = None
+    
+    # Enhanced Google Places address components
+    country: Optional[str] = Field(None, max_length=2, description="ISO country code (2 characters)")
+    postal_code: Optional[str] = Field(None, max_length=20)
+    administrative_area_level_1: Optional[str] = None  # State/province
+    administrative_area_level_2: Optional[str] = None  # County
+    locality: Optional[str] = None  # City
+    sublocality: Optional[str] = None  # Neighborhood
+    route: Optional[str] = None  # Street name
+    street_number: Optional[str] = None  # Street number
+    plus_code: Optional[str] = None  # Google Plus Code
+    
+    # Backward compatibility field (temporary)
+    name: Optional[str] = None  # Will be mapped to description
 
 class ProjectVisitUpdate(BaseModel):
     visit_date: Optional[date] = None
     technician_id: Optional[int] = None
     notes: Optional[str] = None
+    description: Optional[str] = None
+    
+    # Address fields can also be updated
+    address_line1: Optional[str] = None
+    address_line2: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip: Optional[str] = None
+    formatted_address: Optional[str] = None
+    google_place_id: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    place_types: Optional[List[str]] = None
+    country: Optional[str] = Field(None, max_length=2)
+    postal_code: Optional[str] = Field(None, max_length=20)
+    administrative_area_level_1: Optional[str] = None
+    administrative_area_level_2: Optional[str] = None
+    locality: Optional[str] = None
+    sublocality: Optional[str] = None
+    route: Optional[str] = None
+    street_number: Optional[str] = None
+    plus_code: Optional[str] = None
 
 class ProjectVisitResponse(BaseModel):
     id: int
     project_id: int
-    address_id: int
     visit_date: date
     technician_id: int
     notes: Optional[str] = None
-    address_name: Optional[str] = None
+    description: Optional[str] = None  # Location-specific name
+    
+    # Address fields
     address_line1: Optional[str] = None
+    address_line2: Optional[str] = None
     city: Optional[str] = None
     state: Optional[str] = None
+    zip: Optional[str] = None
+    formatted_address: Optional[str] = None
+    google_place_id: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    place_types: Optional[List[str]] = None
+    country: Optional[str] = None
+    postal_code: Optional[str] = None
+    administrative_area_level_1: Optional[str] = None
+    administrative_area_level_2: Optional[str] = None
+    locality: Optional[str] = None
+    sublocality: Optional[str] = None
+    route: Optional[str] = None
+    street_number: Optional[str] = None
+    plus_code: Optional[str] = None
+    
+    # Additional fields
     technician_name: Optional[str] = None
     created_at: datetime
 

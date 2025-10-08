@@ -167,55 +167,71 @@ export const testLogin = async (email, password) => {
 
 export const login = async (email, password) => {
   try {
-    // Use URLSearchParams for form-encoded data instead of FormData for multipart
-    const formData = new URLSearchParams();
-    formData.append('username', email);
-    formData.append('password', password);
-
-    console.log('=== LOGIN DEBUG INFO ===');
-    console.log('Email:', email);
-    console.log('Form data string:', formData.toString());
-    console.log('API base URL:', import.meta.env.VITE_API_URL || 'http://localhost:8000');
-    console.log('Full URL will be:', `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/v1/auth/login`);
-
-    // Use direct fetch instead of axios to debug
-    const directResponse = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/v1/auth/login`, {
-      method: 'POST',
+    console.log('🚀 === LOGIN FLOW STARTED ===');
+    console.log('📧 Email:', email);
+    console.log('🔗 User Agent:', navigator.userAgent);
+    console.log('🌐 Current URL:', window.location.href);
+    console.log('💾 LocalStorage available:', typeof(Storage) !== "undefined");
+    
+    // Create form data as plain string for maximum compatibility
+    const formDataString = `username=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`;
+    console.log('📝 Form data string:', formDataString);
+    
+    // Environment and URL checks
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    console.log('🏠 API base URL:', apiUrl);
+    console.log('🎯 Full login URL:', `${apiUrl}/api/v1/auth/login`);
+    console.log('⚙️ Axios base URL:', api.defaults.baseURL);
+    
+    // Pre-request checks
+    console.log('🔍 Pre-request checks:');
+    console.log('  - Network online:', navigator.onLine);
+    console.log('  - HTTPS context:', window.location.protocol === 'https:');
+    
+    console.log('📤 Sending login request...');
+    
+    // Use axios with mobile-friendly configuration
+    const response = await api.post('/api/v1/auth/login', formDataString, {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Accept': 'application/json',
+        'User-Agent': navigator.userAgent,
+        'Cache-Control': 'no-cache'
       },
-      body: formData
+      timeout: 30000, // 30 second timeout
+      maxRedirects: 0 // Prevent redirects
     });
-
-    console.log('Direct fetch response status:', directResponse.status);
-    console.log('Direct fetch response headers:', Object.fromEntries(directResponse.headers.entries()));
-
-    if (directResponse.ok) {
-      const data = await directResponse.json();
-      console.log('✅ Direct fetch succeeded!', data);
-      setAuthToken(data.access_token);
-      localStorage.setItem('refreshToken', data.refresh_token);
-      return data;
-    } else {
-      const errorText = await directResponse.text();
-      console.log('❌ Direct fetch failed:', errorText);
-      throw new Error(`Direct fetch failed: ${directResponse.status} - ${errorText}`);
+    
+    console.log('✅ Login response received!');
+    console.log('📊 Response status:', response.status);
+    console.log('📋 Response headers:', response.headers);
+    console.log('📦 Response data:', response.data);
+    console.log('🔍 Response data type:', typeof response.data);
+    
+    // Validate response structure
+    if (!response.data) {
+      console.log('❌ No data in response');
+      throw new Error('No data received from server');
     }
-
-    // Original axios code (commented out for debugging)
-    /*
-    const response = await api.post('/api/v1/auth/login', formData, {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-    });
+    
     const { access_token, refresh_token } = response.data;
-    setAuthToken(access_token);
-    localStorage.setItem('refreshToken', refresh_token);
-    return response.data;
-    */
+    console.log('🔑 Access token present:', !!access_token);
+    console.log('🔄 Refresh token present:', !!refresh_token);
+    
+    if (access_token && refresh_token) {
+      console.log('💾 Storing tokens...');
+      setAuthToken(access_token);
+      localStorage.setItem('refreshToken', refresh_token);
+      console.log('✅ Tokens stored successfully');
+      console.log('🎉 LOGIN FLOW COMPLETED SUCCESSFULLY');
+      return response.data;
+    } else {
+      console.log('❌ Missing tokens in response:', response.data);
+      throw new Error('Invalid response: missing tokens');
+    }
   } catch (error) {
+    console.log('❌ Login error caught:', error);
+    
     if (error.code === 'ERR_NETWORK') {
       throw { detail: 'Network error: Unable to reach the server. Please check your connection.' };
     }
@@ -228,6 +244,12 @@ export const login = async (email, password) => {
         throw { detail: error.response.data.detail };
       }
     }
+    
+    // Handle our custom error messages
+    if (error.message) {
+      throw { detail: error.message };
+    }
+    
     throw { detail: 'An error occurred during login' };
   }
 };
@@ -244,4 +266,17 @@ export const getCurrentUser = async () => {
 export const logout = () => {
   localStorage.removeItem('token');
   localStorage.removeItem('refreshToken');
-}; 
+};
+
+// Simple health check for debugging network connectivity
+export const testConnection = async () => {
+  try {
+    console.log('Testing connection to:', API_URL);
+    const response = await api.get('/');
+    console.log('✅ Connection test successful:', response.status, response.data);
+    return { success: true, data: response.data };
+  } catch (error) {
+    console.log('❌ Connection test failed:', error);
+    return { success: false, error: error.message };
+  }
+};

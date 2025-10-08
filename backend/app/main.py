@@ -2,8 +2,9 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
 import logging
+import time
 from app.core.config import settings
-from app.api.v1 import auth, users, roles, projects, samples, companies, laboratory, reports
+from app.api.v1 import auth, users, roles, projects, samples, companies, laboratory, reports, barcode
 from app.startup import startup
 from app.db.session import get_db
 from app.db.queries.manager import query_manager
@@ -50,6 +51,10 @@ tags_metadata = [
         "name": "Report Management",
         "description": "Report generation, finalization, and client access management.",
     },
+    {
+        "name": "Barcode Scanning",
+        "description": "Barcode and QR code validation, formatting, and scanning operations.",
+    },
 ]
 
 app = FastAPI(
@@ -62,13 +67,39 @@ app = FastAPI(
     openapi_tags=tags_metadata,
 )
 
+# Add request logging middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log basic request information."""
+    start_time = time.time()
+    
+    response = await call_next(request)
+    
+    process_time = time.time() - start_time
+    logger.info(f"{request.method} {request.url.path} - {response.status_code} - {process_time:.3f}s")
+    
+    return response
+
 # Set up CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=[
+        "Authorization", 
+        "Content-Type", 
+        "Accept", 
+        "Origin", 
+        "User-Agent",
+        "DNT",
+        "Cache-Control",
+        "X-Requested-With",
+        "If-Modified-Since",
+        "If-None-Match"
+    ],
+    expose_headers=["*"],
+    max_age=600
 )
 
 # Include routers
@@ -80,15 +111,20 @@ app.include_router(projects.router, prefix=f"{settings.API_V1_STR}/projects")
 app.include_router(samples.router, prefix=f"{settings.API_V1_STR}")
 app.include_router(laboratory.router, prefix=f"{settings.API_V1_STR}/laboratory")
 app.include_router(reports.router, prefix=f"{settings.API_V1_STR}/reports")
+app.include_router(barcode.router, prefix=f"{settings.API_V1_STR}/barcode")
 
 # Add OPTIONS handlers for specific common endpoints to support CORS
 # without interfering with 404 responses for truly non-existent endpoints
+@app.options(f"{settings.API_V1_STR}/auth/login")
+@app.options(f"{settings.API_V1_STR}/auth/register")
+@app.options(f"{settings.API_V1_STR}/auth/me")
 @app.options(f"{settings.API_V1_STR}/users/me")
 @app.options(f"{settings.API_V1_STR}/users/")
 @app.options(f"{settings.API_V1_STR}/roles/")
 @app.options(f"{settings.API_V1_STR}/companies/")
 @app.options(f"{settings.API_V1_STR}/projects/")
 @app.options(f"{settings.API_V1_STR}/samples/")
+@app.options(f"{settings.API_V1_STR}/samples/visit/{{visit_id}}")
 @app.options(f"{settings.API_V1_STR}/reports/")
 @app.options(f"{settings.API_V1_STR}/laboratory/samples")
 @app.options(f"{settings.API_V1_STR}/laboratory/batches")
@@ -96,12 +132,14 @@ app.include_router(reports.router, prefix=f"{settings.API_V1_STR}/reports")
 @app.options(f"{settings.API_V1_STR}/laboratory/methods")
 async def options_handler(request: Request):
     """Handle OPTIONS requests for CORS preflight on specific endpoints."""
+    
     return Response(
         status_code=200,
         headers={
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
-            "Access-Control-Allow-Headers": "Authorization, Content-Type, Accept",
+            "Access-Control-Allow-Headers": "Authorization, Content-Type, Accept, User-Agent, Cache-Control",
+            "Access-Control-Max-Age": "86400"
         }
     )
 

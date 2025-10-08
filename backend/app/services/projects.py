@@ -4,8 +4,7 @@ from asyncpg import Pool
 from app.db.queries.manager import query_manager
 from app.schemas.project import (
     ProjectCreate, ProjectUpdate, ProjectResponse,
-    ProjectVisitCreate, ProjectVisitUpdate, ProjectVisitResponse,
-    AddressCreate, AddressUpdate, AddressResponse
+    ProjectVisitCreate, ProjectVisitUpdate, ProjectVisitResponse
 )
 
 
@@ -83,85 +82,195 @@ class ProjectService:
                 query_manager.list_technician_projects,
                 technician_id
             )
-            return [dict(row) for row in rows]
+        return [dict(row) for row in rows]
 
-    # Address management
-    async def create_address(self, address_in: AddressCreate) -> Dict:
-        """Create a new address."""
+    async def _create_blank_samples(self, conn, visit_id: int, project_id: int, technician_id: int):
+        """Create default lab blank and field blank samples for a visit."""
+        # Create lab blank
+        await conn.execute(
+            query_manager.create_sample,
+            project_id,      # project_id
+            None,           # address_id (NULL for visit-based system)
+            visit_id,       # visit_id
+            technician_id,  # collected_by
+            "NOW()",        # collected_at
+            "Lab Blank",   # description
+            None,           # is_inside
+            None,           # flow_rate (NULL for blanks)
+            None,           # volume_required (NULL for blanks)
+            "collected",   # sample_status
+            "lab_blank",   # sample_type
+            "PENDING_SCAN" # cassette_barcode (placeholder until scanned)
+        )
+        
+        # Create field blank
+        await conn.execute(
+            query_manager.create_sample,
+            project_id,      # project_id
+            None,           # address_id (NULL for visit-based system)
+            visit_id,       # visit_id
+            technician_id,  # collected_by
+            "NOW()",        # collected_at
+            "Field Blank", # description
+            None,           # is_inside
+            None,           # flow_rate (NULL for blanks)
+            None,           # volume_required (NULL for blanks)
+            "collected",   # sample_status
+            "field_blank", # sample_type
+            "PENDING_SCAN" # cassette_barcode (placeholder until scanned)
+        )
+        
+    async def create_blank_samples_for_visit(self, visit_id: int) -> bool:
+        """Create blank samples for an existing visit if they don't exist."""
         async with self.pool.acquire() as conn:
-            row = await conn.fetchrow(
-                query_manager.create_address,
-                address_in.name,
-                address_in.address_line1,
-                address_in.address_line2,
-                address_in.city,
-                address_in.state,
-                address_in.zip,
-                address_in.notes
+            # First check if blank samples already exist for this visit
+            existing_blanks = await conn.fetch(
+                "SELECT id FROM samples WHERE visit_id = $1 AND sample_type IN ('lab_blank', 'field_blank')",
+                visit_id
             )
-            return dict(row)
-
-    async def get_address(self, address_id: int) -> Optional[Dict]:
-        """Get an address by ID."""
-        async with self.pool.acquire() as conn:
-            row = await conn.fetchrow(
-                query_manager.get_address,
-                address_id
-            )
-            return dict(row) if row else None
-
-    async def update_address(self, address_id: int, address_in: AddressUpdate) -> Optional[Dict]:
-        """Update an address."""
-        async with self.pool.acquire() as conn:
-            update_data = address_in.model_dump(exclude_unset=True)
             
-            row = await conn.fetchrow(
-                query_manager.update_address,
-                address_id,
-                update_data.get('name'),
-                update_data.get('address_line1'),
-                update_data.get('address_line2'),
-                update_data.get('city'),
-                update_data.get('state'),
-                update_data.get('zip'),
-                update_data.get('notes')
+            if len(existing_blanks) >= 2:
+                return False  # Blank samples already exist
+            
+            # Get visit details to get project_id and technician_id
+            visit = await conn.fetchrow(
+                "SELECT project_id, technician_id FROM project_visits WHERE id = $1",
+                visit_id
             )
-            return dict(row) if row else None
+            
+            if not visit:
+                return False  # Visit not found
+            
+            # Create missing blank samples
+            existing_types = await conn.fetch(
+                "SELECT sample_type FROM samples WHERE visit_id = $1 AND sample_type IN ('lab_blank', 'field_blank')",
+                visit_id
+            )
+            existing_types_set = {row['sample_type'] for row in existing_types}
+            
+            if 'lab_blank' not in existing_types_set:
+                await conn.execute(
+                    query_manager.create_sample,
+                    visit['project_id'],  # project_id
+                    None,                # address_id (NULL for visit-based system)
+                    visit_id,           # visit_id
+                    visit['technician_id'], # collected_by
+                    "NOW()",            # collected_at
+                    "Lab Blank",       # description
+                    None,               # is_inside
+                    None,               # flow_rate (NULL for blanks)
+                    None,               # volume_required (NULL for blanks)
+                    "collected",       # sample_status
+                    "lab_blank",       # sample_type
+                    "PENDING_SCAN"     # cassette_barcode (placeholder until scanned)
+                )
+            
+            if 'field_blank' not in existing_types_set:
+                await conn.execute(
+                    query_manager.create_sample,
+                    visit['project_id'],  # project_id
+                    None,                # address_id (NULL for visit-based system)
+                    visit_id,           # visit_id
+                    visit['technician_id'], # collected_by
+                    "NOW()",            # collected_at
+                    "Field Blank",     # description
+                    None,               # is_inside
+                    None,               # flow_rate (NULL for blanks)
+                    None,               # volume_required (NULL for blanks)
+                    "collected",       # sample_status
+                    "field_blank",     # sample_type
+                    "PENDING_SCAN"     # cassette_barcode (placeholder until scanned)
+                )
+            
+            return True
 
-    async def delete_address(self, address_id: int) -> bool:
-        """Delete an address."""
-        async with self.pool.acquire() as conn:
-            result = await conn.execute(
-                query_manager.delete_address,
-                address_id
-            )
-            return result == "DELETE 1"
+    # Address management is now handled through project visits
+    # No separate address methods needed
 
     # Project visits management
     async def create_project_visit(self, visit_in: ProjectVisitCreate) -> Dict:
-        """Create a project visit."""
+        """Create a project visit with embedded address data."""
         async with self.pool.acquire() as conn:
+            # Ensure country code is properly formatted (2 characters max) or None
+            country_code = None
+            if visit_in.country:
+                country_code = visit_in.country[:2] if len(visit_in.country) >= 2 else visit_in.country
+            
+            # Map 'name' to 'description' for backward compatibility
+            description = visit_in.description
+            if not description and visit_in.name:
+                description = visit_in.name
+                
             row = await conn.fetchrow(
                 query_manager.create_project_visit,
                 visit_in.project_id,
-                visit_in.address_id,
                 visit_in.visit_date,
                 visit_in.technician_id,
-                visit_in.notes
+                visit_in.notes,
+                description,
+                visit_in.address_line1,
+                visit_in.address_line2,
+                visit_in.city,
+                visit_in.state,
+                visit_in.zip,
+                visit_in.formatted_address,
+                visit_in.google_place_id,
+                visit_in.latitude,
+                visit_in.longitude,
+                visit_in.place_types,
+                country_code,
+                visit_in.postal_code,
+                visit_in.administrative_area_level_1,
+                visit_in.administrative_area_level_2,
+                visit_in.locality,
+                visit_in.sublocality,
+                visit_in.route,
+                visit_in.street_number,
+                visit_in.plus_code
             )
-            return dict(row)
+            visit_data = dict(row)
+            
+            # Create default blank samples for this visit
+            await self._create_blank_samples(conn, visit_data['id'], visit_in.project_id, visit_in.technician_id)
+            
+            return visit_data
 
     async def update_project_visit(self, visit_id: int, visit_in: ProjectVisitUpdate) -> Optional[Dict]:
-        """Update a project visit."""
+        """Update a project visit with embedded address data."""
         async with self.pool.acquire() as conn:
             update_data = visit_in.model_dump(exclude_unset=True)
+            
+            # Ensure country code is properly formatted (2 characters max) or None
+            country_code = update_data.get('country')
+            if country_code:
+                country_code = country_code[:2] if len(country_code) >= 2 else country_code
             
             row = await conn.fetchrow(
                 query_manager.update_project_visit,
                 visit_id,
                 update_data.get('visit_date'),
                 update_data.get('technician_id'),
-                update_data.get('notes')
+                update_data.get('notes'),
+                update_data.get('description'),
+                update_data.get('address_line1'),
+                update_data.get('address_line2'),
+                update_data.get('city'),
+                update_data.get('state'),
+                update_data.get('zip'),
+                update_data.get('formatted_address'),
+                update_data.get('google_place_id'),
+                update_data.get('latitude'),
+                update_data.get('longitude'),
+                update_data.get('place_types'),
+                country_code,
+                update_data.get('postal_code'),
+                update_data.get('administrative_area_level_1'),
+                update_data.get('administrative_area_level_2'),
+                update_data.get('locality'),
+                update_data.get('sublocality'),
+                update_data.get('route'),
+                update_data.get('street_number'),
+                update_data.get('plus_code')
             )
             return dict(row) if row else None
 
@@ -221,15 +330,7 @@ class ProjectService:
             )
             return bool(result)
 
-    async def check_address_in_project(self, project_id: int, address_id: int) -> bool:
-        """Check if an address is associated with a project."""
-        async with self.pool.acquire() as conn:
-            result = await conn.fetchval(
-                query_manager.check_address_in_project,
-                project_id,
-                address_id
-            )
-            return bool(result)
+    # Address checking is no longer needed since addresses are embedded in visits
 
     # Project technician assignment methods (separate from visits)
     async def assign_technician_to_project(self, project_id: int, technician_id: int, assigned_by: int) -> Optional[Dict]:

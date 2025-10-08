@@ -12,6 +12,11 @@ class CompanyCreate(BaseModel):
     city: Optional[str] = None
     state: Optional[str] = None
     zip: Optional[str] = None
+    # Additional Google Places fields (optional, not stored in DB yet)
+    formatted_address: Optional[str] = None
+    google_place_id: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 class CompanyUpdate(BaseModel):
@@ -34,6 +39,13 @@ class CompanyResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+    
+    @property
+    def display_name(self) -> str:
+        """Return the company name with proper title case for display."""
+        if not self.name:
+            return ""
+        return self.name.title()
 
 
 class CompanyService:
@@ -43,9 +55,12 @@ class CompanyService:
     async def create_company(self, company_in: CompanyCreate) -> CompanyResponse:
         """Create a new client company."""
         async with self.pool.acquire() as conn:
+            # Clean inputs - normalize name to lowercase
+            cleaned_name = company_in.name.strip().lower() if company_in.name else ""
+            
             row = await conn.fetchrow(
                 query_manager.create_company,
-                company_in.name,
+                cleaned_name,
                 company_in.address_line1,
                 company_in.address_line2,
                 company_in.city,
@@ -66,9 +81,12 @@ class CompanyService:
     async def get_company_by_name(self, name: str) -> Optional[CompanyResponse]:
         """Get a company by name."""
         async with self.pool.acquire() as conn:
+            # Clean input - normalize name to lowercase for consistent lookup
+            cleaned_name = name.strip().lower() if name else ""
+            
             row = await conn.fetchrow(
                 query_manager.get_company_by_name,
-                name
+                cleaned_name
             )
             return CompanyResponse(**dict(row)) if row else None
 
@@ -78,10 +96,15 @@ class CompanyService:
             # Convert to dict and filter out None values
             update_data = company_in.model_dump(exclude_unset=True)
             
+            # Clean inputs - normalize name to lowercase if provided
+            cleaned_name = None
+            if 'name' in update_data and update_data['name']:
+                cleaned_name = update_data['name'].strip().lower()
+            
             row = await conn.fetchrow(
                 query_manager.update_company,
                 company_id,
-                update_data.get('name'),
+                cleaned_name,
                 update_data.get('address_line1'),
                 update_data.get('address_line2'),
                 update_data.get('city'),

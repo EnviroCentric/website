@@ -8,8 +8,7 @@ from app.core.deps import get_db, get_current_active_user
 from app.schemas.user import UserResponse
 from app.schemas.project import (
     ProjectCreate, ProjectUpdate, ProjectResponse,
-    ProjectVisitCreate, ProjectVisitUpdate, ProjectVisitResponse,
-    AddressCreate, AddressUpdate, AddressResponse
+    ProjectVisitCreate, ProjectVisitUpdate, ProjectVisitResponse
 )
 from app.services.projects import ProjectService
 from app.services.roles import get_user_role_level
@@ -227,89 +226,93 @@ async def list_projects(
     return [ProjectResponse(**project) for project in technician_projects]
 
 
-# Address endpoints
-@router.post("/addresses", response_model=dict, status_code=status.HTTP_201_CREATED)
-async def create_address(
-    address_in: AddressCreate,
-    current_user: UserResponse = Depends(get_current_active_user),
-    project_service: ProjectService = Depends(get_project_service),
-    places_service: GooglePlacesService = Depends(get_google_places_service),
-    db: Pool = Depends(get_db)
-):
-    """Create a new address with Google Places validation. Requires technician level or above."""
-    role_level = await get_user_role_level(db, current_user.id)
-    if role_level < 50:  # Technician level required
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only technicians and higher can create addresses"
-        )
-    
-    # Validate and enrich address data if Google Places data is available
-    try:
-        address_dict = address_in.dict()
-        if any([address_dict.get('address_line1'), address_dict.get('formatted_address')]):
-            validated_data = await places_service.validate_and_enrich_address(address_dict)
-            # Update the address_in with validated data
-            for key, value in validated_data.items():
-                if hasattr(address_in, key) and value is not None:
-                    setattr(address_in, key, value)
-    except Exception as e:
-        # Log the error but don't fail the creation
-        logger.warning(f"Address validation failed: {e}")
-    
-    return await project_service.create_address(address_in)
-
-
-
-
-@router.get("/addresses/{address_id}", response_model=dict)
-async def get_address(
-    address_id: int,
-    current_user: UserResponse = Depends(get_current_active_user),
-    project_service: ProjectService = Depends(get_project_service)
-):
-    """Get an address by ID."""
-    address = await project_service.get_address(address_id)
-    if not address:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Address not found"
-        )
-    return address
-
-
-@router.put("/addresses/{address_id}", response_model=dict)
-async def update_address(
-    address_id: int,
-    address_in: AddressUpdate,
+# Project addresses endpoint (addresses linked through visits)
+@router.get("/{project_id}/addresses", response_model=List[dict])
+async def get_project_addresses(
+    project_id: int,
     current_user: UserResponse = Depends(get_current_active_user),
     project_service: ProjectService = Depends(get_project_service),
     db: Pool = Depends(get_db)
 ):
-    """Update an address. Requires technician level or above."""
-    # Check if address exists
-    existing_address = await project_service.get_address(address_id)
-    if not existing_address:
+    """Get all addresses associated with a project through visits."""
+    # Check if project exists and user has access
+    project = await project_service.get_project_by_id(project_id)
+    if not project:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Address not found"
+            detail="Project not found"
         )
     
     role_level = await get_user_role_level(db, current_user.id)
-    if role_level < 50:  # Technician level required
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only technicians and higher can update addresses"
-        )
     
-    updated_address = await project_service.update_address(address_id, address_in)
-    if not updated_address:
+    # Access control for viewing project addresses
+    if current_user.is_superuser:
+        pass  # Superusers can access any project
+    elif current_user.company_id is not None:
+        # Client users can only access projects from their company
+        if project.company_id != current_user.company_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only access projects from your company"
+            )
+    else:
+        # Employee users - managers can access any project
+        if role_level < 90:  # Below manager level
+            # Employees must be assigned to the project
+            is_assigned = await project_service.check_technician_assigned_to_project(
+                project_id, current_user.id
+            )
+            if not is_assigned:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You can only access projects you are assigned to"
+                )
+    
+    return await project_service.get_project_addresses(project_id)
+
+
+@router.get("/{project_id}/technicians", response_model=List[dict])
+async def get_project_technicians(
+    project_id: int,
+    current_user: UserResponse = Depends(get_current_active_user),
+    project_service: ProjectService = Depends(get_project_service),
+    db: Pool = Depends(get_db)
+):
+    """Get all technicians assigned to a project through visits."""
+    # Check if project exists and user has access
+    project = await project_service.get_project_by_id(project_id)
+    if not project:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Address not found"
+            detail="Project not found"
         )
     
-    return updated_address
+    role_level = await get_user_role_level(db, current_user.id)
+    
+    # Access control for viewing project technicians
+    if current_user.is_superuser:
+        pass  # Superusers can access any project
+    elif current_user.company_id is not None:
+        # Client users can only access projects from their company
+        if project.company_id != current_user.company_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only access projects from your company"
+            )
+    else:
+        # Employee users - managers can access any project
+        if role_level < 90:  # Below manager level
+            # Employees must be assigned to the project
+            is_assigned = await project_service.check_technician_assigned_to_project(
+                project_id, current_user.id
+            )
+            if not is_assigned:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You can only access projects you are assigned to"
+                )
+    
+    return await project_service.get_project_technicians(project_id)
 
 
 # Address validation endpoints
@@ -482,14 +485,23 @@ async def get_project_visits(
         return await project_service.get_project_visits(project_id)
 
 
-@router.get("/{project_id}/addresses", response_model=List[dict])
-async def get_project_addresses(
+@router.post("/{project_id}/addresses", response_model=dict, status_code=status.HTTP_201_CREATED)
+async def create_project_address(
     project_id: int,
+    visit_in: ProjectVisitCreate,
     current_user: UserResponse = Depends(get_current_active_user),
     project_service: ProjectService = Depends(get_project_service),
+    places_service: GooglePlacesService = Depends(get_google_places_service),
     db: Pool = Depends(get_db)
 ):
-    """Get all addresses associated with a project."""
+    """Create a project visit with embedded address data. Field techs (50+) and managers (90+) only."""
+    # Validate project_id matches the visit data
+    if visit_in.project_id != project_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Project ID in URL must match project ID in request body"
+        )
+    
     # Check if project exists and user has access
     project = await project_service.get_project_by_id(project_id)
     if not project:
@@ -500,74 +512,57 @@ async def get_project_addresses(
     
     role_level = await get_user_role_level(db, current_user.id)
     
-    # Access control for viewing project addresses
-    if current_user.is_superuser:
-        pass  # Superusers can access addresses for any project
-    elif current_user.company_id is not None:
-        # Client users can only access addresses for projects from their company
-        if project.company_id != current_user.company_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only access addresses for projects from your company"
-            )
-    else:
-        # Employee users - supervisors and above can access addresses for any project
-        if role_level < 80:  # Below supervisor level
-            # Employees must be assigned to the project
-            is_assigned = await project_service.check_technician_assigned_to_project(
-                project_id, current_user.id
-            )
-            if not is_assigned:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="You can only access addresses for projects you are assigned to"
-                )
-    
-    return await project_service.get_project_addresses(project_id)
-
-
-@router.get("/{project_id}/technicians", response_model=List[dict])
-async def get_project_technicians(
-    project_id: int,
-    current_user: UserResponse = Depends(get_current_active_user),
-    project_service: ProjectService = Depends(get_project_service),
-    db: Pool = Depends(get_db)
-):
-    """Get all technicians assigned to a project."""
-    # Check if project exists and user has access
-    project = await project_service.get_project_by_id(project_id)
-    if not project:
+    # Special permission logic: Field techs (50+) and managers (90+) only
+    # Excludes supervisors (80) and lab techs (60)
+    if not (role_level >= 50 and (role_level < 60 or role_level >= 90)):
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only field technicians and managers can add addresses to projects"
         )
     
-    role_level = await get_user_role_level(db, current_user.id)
-    
-    # Access control for viewing project technicians
+    # Access control for creating project visits with addresses
     if current_user.is_superuser:
-        pass  # Superusers can access technicians for any project
+        pass  # Superusers can create visits for any project
     elif current_user.company_id is not None:
-        # Client users can only access technicians for projects from their company
+        # Client users can only create visits for projects from their company
         if project.company_id != current_user.company_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only access technicians for projects from your company"
+                detail="You can only create visits for projects from your company"
             )
     else:
-        # Employee users - supervisors and above can access technicians for any project
-        if role_level < 80:  # Below supervisor level
-            # Employees must be assigned to the project
+        # Employee users - managers can create visits for any project
+        if role_level < 90:  # Below manager level
+            # Field techs must be assigned to the project
             is_assigned = await project_service.check_technician_assigned_to_project(
                 project_id, current_user.id
             )
             if not is_assigned:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="You can only access technician lists for projects you are assigned to"
+                    detail="You can only create visits for projects you are assigned to"
                 )
     
-    return await project_service.get_project_technicians(project_id)
+    # Validate and enrich address data if Google Places data is available
+    try:
+        visit_dict = visit_in.model_dump()
+        if any([visit_dict.get('address_line1'), visit_dict.get('formatted_address')]):
+            validated_data = await places_service.validate_and_enrich_address(visit_dict)
+            # Update the visit_in with validated data
+            for key, value in validated_data.items():
+                if hasattr(visit_in, key) and value is not None:
+                    setattr(visit_in, key, value)
+    except Exception as e:
+        # Log the error but don't fail the creation
+        logger.warning(f"Address validation failed: {e}")
+    
+    # Create project visit with embedded address data
+    visit = await project_service.create_project_visit(visit_in)
+    
+    return {
+        "visit": visit,
+        "message": "Address added to project successfully"
+    }
 
 
 @router.post("/{project_id}/technicians", status_code=status.HTTP_201_CREATED)

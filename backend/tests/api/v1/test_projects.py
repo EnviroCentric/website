@@ -2,7 +2,7 @@ import pytest
 from datetime import date
 from httpx import AsyncClient
 from fastapi import status
-from app.schemas.project import ProjectCreate, ProjectUpdate, AddressCreate, AddressUpdate
+from app.schemas.project import ProjectCreate, ProjectUpdate
 
 @pytest.mark.asyncio
 async def test_create_project_success(client: AsyncClient, db_pool, admin_token_headers):
@@ -33,19 +33,16 @@ async def test_get_project_success(client: AsyncClient, db_pool, technician_toke
     tech_response = await client.get("/api/v1/users/me", headers=technician_token_headers)
     technician_id = tech_response.json()["id"]
 
-    # Create an address
-    address_data = {"name": "123 Test St", "address_line1": "123 Test Street", "city": "Test City"}
-    address_response = await client.post("/api/v1/projects/addresses", json=address_data, headers=admin_token_headers)
-    address_id = address_response.json()["id"]
-
-    # Create a project visit (this is how technicians get associated with projects)
+    # Create a project visit with embedded address (this is how technicians get associated with projects)
     from datetime import date
     visit_data = {
         "project_id": project_id,
-        "address_id": address_id,
         "visit_date": date.today().isoformat(),
         "technician_id": technician_id,
-        "notes": "Initial visit"
+        "notes": "Initial visit",
+        "description": "123 Test St",
+        "address_line1": "123 Test Street",
+        "city": "Test City"
     }
     await client.post(f"/api/v1/projects/{project_id}/visits", json=visit_data, headers=admin_token_headers)
 
@@ -79,21 +76,34 @@ async def test_update_project_success(client: AsyncClient, db_pool, admin_token_
     assert data["name"] == "Updated Project"
 
 @pytest.mark.asyncio
-async def test_create_address_success(client: AsyncClient, db_pool, admin_token_headers):
-    """Test creating a standalone address."""
-    # Create an address (addresses are standalone entities)
-    address_data = {
-        "name": "123 Test St", 
+async def test_create_project_with_address_success(client: AsyncClient, db_pool, admin_token_headers, technician_token_headers):
+    """Test creating a project visit with embedded address."""
+    # Create a project first
+    project_data = {"name": "Test Project", "company_id": 1}
+    project_response = await client.post("/api/v1/projects/", json=project_data, headers=admin_token_headers)
+    project_id = project_response.json()["id"]
+    
+    # Get technician ID
+    tech_response = await client.get("/api/v1/users/me", headers=technician_token_headers)
+    technician_id = tech_response.json()["id"]
+    
+    # Create a project visit with embedded address
+    visit_data = {
+        "project_id": project_id,
+        "visit_date": date.today().isoformat(),
+        "technician_id": technician_id,
+        "description": "123 Test St",
         "address_line1": "123 Test Street",
         "city": "Test City",
         "state": "TS",
         "zip": "12345"
     }
-    response = await client.post("/api/v1/projects/addresses", json=address_data, headers=admin_token_headers)
+    response = await client.post(f"/api/v1/projects/{project_id}/addresses", json=visit_data, headers=admin_token_headers)
     assert response.status_code == 201
     data = response.json()
-    assert data["name"] == "123 Test St"
-    assert data["address_line1"] == "123 Test Street"
+    assert "visit" in data
+    assert data["visit"]["description"] == "123 Test St"
+    assert data["visit"]["address_line1"] == "123 Test Street"
 
 @pytest.mark.asyncio
 async def test_create_project_visit_success(client: AsyncClient, db_pool, admin_token_headers, technician_token_headers):
@@ -103,29 +113,26 @@ async def test_create_project_visit_success(client: AsyncClient, db_pool, admin_
     create_response = await client.post("/api/v1/projects/", json=project_data, headers=admin_token_headers)
     project_id = create_response.json()["id"]
 
-    # Create an address
-    address_data = {"name": "123 Test St", "address_line1": "123 Test Street"}
-    address_response = await client.post("/api/v1/projects/addresses", json=address_data, headers=admin_token_headers)
-    address_id = address_response.json()["id"]
-
     # Get technician ID
     tech_response = await client.get("/api/v1/users/me", headers=technician_token_headers)
     technician_id = tech_response.json()["id"]
 
-    # Create project visit
+    # Create project visit with embedded address
     visit_data = {
         "project_id": project_id,
-        "address_id": address_id,
         "visit_date": date.today().isoformat(),
         "technician_id": technician_id,
-        "notes": "Field visit for sampling"
+        "notes": "Field visit for sampling",
+        "description": "123 Test St",
+        "address_line1": "123 Test Street"
     }
     response = await client.post(f"/api/v1/projects/{project_id}/visits", json=visit_data, headers=admin_token_headers)
     assert response.status_code == 201
     data = response.json()
     assert data["project_id"] == project_id
-    assert data["address_id"] == address_id
     assert data["technician_id"] == technician_id
+    assert data["description"] == "123 Test St"
+    assert data["address_line1"] == "123 Test Street"
 
 @pytest.mark.asyncio
 async def test_get_project_visits_success(client: AsyncClient, db_pool, admin_token_headers, technician_token_headers):
@@ -135,22 +142,18 @@ async def test_get_project_visits_success(client: AsyncClient, db_pool, admin_to
     create_response = await client.post("/api/v1/projects/", json=project_data, headers=admin_token_headers)
     project_id = create_response.json()["id"]
 
-    # Create an address
-    address_data = {"name": "123 Test St", "address_line1": "123 Test Street"}
-    address_response = await client.post("/api/v1/projects/addresses", json=address_data, headers=admin_token_headers)
-    address_id = address_response.json()["id"]
-
     # Get technician ID
     tech_response = await client.get("/api/v1/users/me", headers=technician_token_headers)
     technician_id = tech_response.json()["id"]
 
-    # Create project visit
+    # Create project visit with embedded address
     visit_data = {
         "project_id": project_id,
-        "address_id": address_id,
         "visit_date": date.today().isoformat(),
         "technician_id": technician_id,
-        "notes": "Field visit for sampling"
+        "notes": "Field visit for sampling",
+        "description": "123 Test St",
+        "address_line1": "123 Test Street"
     }
     await client.post(f"/api/v1/projects/{project_id}/visits", json=visit_data, headers=admin_token_headers)
 
@@ -160,7 +163,8 @@ async def test_get_project_visits_success(client: AsyncClient, db_pool, admin_to
     visits = response.json()
     assert len(visits) > 0
     assert visits[0]["project_id"] == project_id
-    assert visits[0]["address_id"] == address_id
+    assert visits[0]["description"] == "123 Test St"
+    assert visits[0]["address_line1"] == "123 Test Street"
 
 @pytest.mark.asyncio
 async def test_create_project_visit_unauthorized(client: AsyncClient, db_pool, technician_token_headers):
@@ -188,22 +192,18 @@ async def test_get_project_addresses_success(client, admin_token_headers, techni
     assert response.status_code == 201
     project = response.json()
 
-    # Create an address
-    address_data = {"name": "Test Address", "address_line1": "123 Test Street"}
-    address_response = await client.post("/api/v1/projects/addresses", json=address_data, headers=admin_token_headers)
-    address_id = address_response.json()["id"]
-
     # Get technician ID
     tech_response = await client.get("/api/v1/users/me", headers=technician_token_headers)
     technician_id = tech_response.json()["id"]
 
-    # Create project visit (links address to project)
+    # Create project visit with embedded address (links address to project)
     visit_data = {
         "project_id": project["id"],
-        "address_id": address_id,
         "visit_date": date.today().isoformat(),
         "technician_id": technician_id,
-        "notes": "Field visit"
+        "notes": "Field visit",
+        "description": "Test Address",
+        "address_line1": "123 Test Street"
     }
     await client.post(f"/api/v1/projects/{project['id']}/visits", json=visit_data, headers=admin_token_headers)
 
@@ -215,27 +215,9 @@ async def test_get_project_addresses_success(client, admin_token_headers, techni
     assert response.status_code == 200
     addresses = response.json()
     assert len(addresses) > 0
-    assert any(addr["name"] == "Test Address" for addr in addresses)
+    assert any(addr["address_line1"] == "123 Test Street" for addr in addresses)
 
-@pytest.mark.asyncio
-async def test_update_address_success(client: AsyncClient, db_pool, admin_token_headers):
-    """Test updating an address."""
-    # Create an address
-    address_data = {"name": "123 Test St", "address_line1": "123 Test Street"}
-    create_response = await client.post("/api/v1/projects/addresses", json=address_data, headers=admin_token_headers)
-    address_id = create_response.json()["id"]
-
-    # Update address name
-    update_data = {"name": "456 New St", "address_line1": "456 New Street"}
-    response = await client.put(
-        f"/api/v1/projects/addresses/{address_id}",
-        json=update_data,
-        headers=admin_token_headers
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["name"] == "456 New St"
-    assert data["address_line1"] == "456 New Street"
+# Address updates are now done through project visit updates
 
 @pytest.mark.asyncio
 async def test_get_project_visits_by_date(client: AsyncClient, technician_token_headers, admin_token_headers):
@@ -244,23 +226,19 @@ async def test_get_project_visits_by_date(client: AsyncClient, technician_token_
     project_resp = await client.post("/api/v1/projects/", json={"name": "Test Project", "company_id": 1}, headers=admin_token_headers)
     project_id = project_resp.json()["id"]
     
-    # Create address
-    address_data = {"name": "Test Address", "address_line1": "123 Test Street"}
-    addr_resp = await client.post("/api/v1/projects/addresses", json=address_data, headers=admin_token_headers)
-    address_id = addr_resp.json()["id"]
-    
     # Get technician ID
     tech_response = await client.get("/api/v1/users/me", headers=technician_token_headers)
     technician_id = tech_response.json()["id"]
     
-    # Create visit for today
+    # Create visit for today with embedded address
     today = date.today().isoformat()
     visit_data = {
         "project_id": project_id,
-        "address_id": address_id,
         "visit_date": today,
         "technician_id": technician_id,
-        "notes": "Today's visit"
+        "notes": "Today's visit",
+        "description": "Test Address",
+        "address_line1": "123 Test Street"
     }
     await client.post(f"/api/v1/projects/{project_id}/visits", json=visit_data, headers=admin_token_headers)
     

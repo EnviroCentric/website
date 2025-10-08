@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import Modal from '../components/Modal';
-import AddressInput from '../components/AddressInput';
 import { formatDate } from '../utils/dateUtils';
 import { formatRoleName } from '../utils/roleUtils';
 import { useAuth } from '../context/AuthContext';
@@ -15,22 +14,6 @@ export default function ProjectDashboard() {
   const [availableTechnicians, setAvailableTechnicians] = useState([]);
   const [selectedTechnicians, setSelectedTechnicians] = useState([]);
   const [assignedTechnicians, setAssignedTechnicians] = useState([]);
-  const [isSampleModalOpen, setIsSampleModalOpen] = useState(false);
-  const [todayAddresses, setTodayAddresses] = useState([]);
-  const [newAddressData, setNewAddressData] = useState({
-    name: '',
-    address_line1: '',
-    address_line2: '',
-    city: '',
-    state: '',
-    zip: '',
-    formatted_address: '',
-    google_place_id: '',
-    latitude: null,
-    longitude: null
-  });
-  const [addressLoading, setAddressLoading] = useState(false);
-  const [addressError, setAddressError] = useState(null);
   const [technicianSearchTerm, setTechnicianSearchTerm] = useState('');
   const { projectId } = useParams();
   const { user } = useAuth();
@@ -175,58 +158,6 @@ export default function ProjectDashboard() {
     }
   };
 
-  const fetchTodayAddresses = async () => {
-    setAddressLoading(true);
-    setAddressError(null);
-    try {
-      const response = await api.get(`/api/v1/projects/${projectId}/addresses?date=${today}`);
-      setTodayAddresses(response.data);
-    } catch (err) {
-      setAddressError("Failed to fetch today's addresses");
-    } finally {
-      setAddressLoading(false);
-    }
-  };
-
-  const handleOpenSampleModal = () => {
-    setIsSampleModalOpen(true);
-    fetchTodayAddresses();
-  };
-
-  const handleSelectAddress = (addressId) => {
-    setIsSampleModalOpen(false);
-    navigate(`/projects/${projectId}/addresses/${addressId}/collect-samples`);
-  };
-
-  const handleAddAddress = async (e) => {
-    e.preventDefault();
-    setAddressLoading(true);
-    setAddressError(null);
-    try {
-      const response = await api.post(`/api/v1/projects/${projectId}/addresses`, {
-        ...newAddressData,
-        date: today,
-      });
-      setNewAddressData({
-        name: '',
-        address_line1: '',
-        address_line2: '',
-        city: '',
-        state: '',
-        zip: '',
-        formatted_address: '',
-        google_place_id: '',
-        latitude: null,
-        longitude: null
-      });
-      setIsSampleModalOpen(false);
-      navigate(`/projects/${projectId}/addresses/${response.data.id}/collect-samples`);
-    } catch (err) {
-      setAddressError("Failed to add address");
-    } finally {
-      setAddressLoading(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -309,14 +240,14 @@ export default function ProjectDashboard() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <button
-          onClick={handleOpenSampleModal}
+          onClick={() => handleAction('collect')}
           className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow duration-200 text-left"
         >
           <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
             Collect Samples
           </h3>
           <p className="text-gray-500 dark:text-gray-400">
-            Record and manage sample collection for this project
+            Add a collection location and start recording samples
           </p>
         </button>
 
@@ -477,63 +408,6 @@ export default function ProjectDashboard() {
         </div>
       </Modal>
 
-      <Modal isOpen={isSampleModalOpen} onClose={() => setIsSampleModalOpen(false)}>
-        <div className="space-y-6">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Sample Collection</h2>
-          <div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Today's Addresses</h3>
-            {addressLoading ? (
-              <div>Loading...</div>
-            ) : addressError ? (
-              <div className="text-red-500">{addressError}</div>
-            ) : todayAddresses.length === 0 ? (
-              <div className="text-gray-500">No addresses for today.</div>
-            ) : (
-              <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-                {todayAddresses.map(addr => (
-                  <li key={addr.id} className="py-2 flex justify-between items-center">
-                    <span>{addr.name}</span>
-                    <button
-                      className="ml-4 px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
-                      onClick={() => handleSelectAddress(addr.id)}
-                    >
-                      Select
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          <form onSubmit={handleAddAddress} className="pt-4 border-t border-gray-200 dark:border-gray-700">
-            <h4 className="text-md font-medium text-gray-700 dark:text-gray-300 mb-4">Add New Address for Today</h4>
-            
-            <AddressInput
-              value={newAddressData}
-              onChange={setNewAddressData}
-              required={true}
-              disabled={addressLoading}
-              className="mb-4"
-            />
-            
-            <div className="flex justify-end space-x-3 pt-4">
-              <button
-                type="button"
-                onClick={() => setIsSampleModalOpen(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                disabled={addressLoading || (!newAddressData.address_line1 && !newAddressData.formatted_address)}
-              >
-                {addressLoading ? 'Adding...' : 'Add Address & Collect Samples'}
-              </button>
-            </div>
-          </form>
-        </div>
-      </Modal>
     </div>
   );
 } 

@@ -10,8 +10,9 @@ INSERT INTO samples (
     flow_rate, 
     volume_required, 
     sample_status, 
+    sample_type,
     cassette_barcode
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) 
 RETURNING *;
 
 -- name: get_sample
@@ -40,10 +41,10 @@ ORDER BY s.collected_at DESC;
 -- name: get_samples_by_visit
 SELECT 
     s.*,
-    a.name as address_name,
+    pv.description as address_name,
     u.first_name || ' ' || u.last_name as collected_by_name
 FROM samples s
-LEFT JOIN addresses a ON s.address_id = a.id
+LEFT JOIN project_visits pv ON s.visit_id = pv.id
 LEFT JOIN users u ON s.collected_by = u.id
 WHERE s.visit_id = $1 
 ORDER BY s.collected_at DESC;
